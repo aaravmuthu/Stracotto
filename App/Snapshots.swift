@@ -97,6 +97,7 @@ enum Snapshots {
         }
         if args.contains("--dump") {
             let monitor = BatteryMonitor()
+            monitor.chargeTarget = { MCLClient.shared.isEnabled ? (MCLClient.shared.limit ?? 100) : 100 }
             RunLoop.main.run(until: Date().addingTimeInterval(3)) // let the system_profiler health read land
             dump(monitor.snapshot)
             exit(0)

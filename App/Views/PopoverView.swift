@@ -93,9 +93,11 @@ struct PopoverView: View {
             .padding(.bottom, 8)
 
             BatteryBar(percent: s.percent, state: s.state, plugEvents: monitor.plugEvents,
-                       limit: charge.limit < 100 ? charge.limit : nil,
+                       limit: charge.limit,
                        sailingFloor: sailing ? charge.limit - Int(sailingRange) : nil,
-                       toppingUp: charge.isToppingUp)
+                       toppingUp: charge.isToppingUp,
+                       allowedLimits: charge.allowedLimits,
+                       onLimitChange: { charge.limit = $0 })
 
             if showPowerFlow {
                 PowerFlowView(flow: s.flow, state: s.state, adapterWatts: s.adapterWatts, plugEvents: monitor.plugEvents, height: 181)

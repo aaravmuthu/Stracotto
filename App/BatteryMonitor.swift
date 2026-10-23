@@ -219,15 +219,24 @@ final class BatteryMonitor {
             return Int((remaining / -avg * 60).rounded())
         case .charging:
             let target = full * Double(chargeTarget()) / 100
-            let toGo = target - remaining
-            guard toGo > 0 else { return nil }
-            // mAh per minute: from the gauge's time-to-full if it has one, else from averaged current.
-            let rate: Double
-            if let toFull = s.minutesRemaining, toFull > 0 { rate = (full - remaining) / Double(toFull) }
-            else if let avg = avgCurrent, avg > 50 { rate = avg / 60 }
-            else { return nil }
-            let minutes = toGo / rate
-            return minutes.isFinite && minutes > 0 && minutes < 60 * 24 ? max(Int(minutes.rounded()), 1) : nil
+            guard target - remaining > 0 else { return nil }
+            // Li-ion charges at near-constant current up to ~80 %, then tapers. The gauge's time-to-full already
+            // includes the taper, so it calibrates how slow the top end is; the averaged current gives the fast part.
+            let knee = full * 0.8
+            let avg = (avgCurrent ?? 0) / 60          // mAh per minute
+            let toFull = s.minutesRemaining.map(Double.init)
+            var minutes: Double?
+            if remaining < knee, avg > 1 {
+                let fastToKnee = (knee - remaining) / avg
+                let slowRate = toFull.flatMap { $0 > fastToKnee + 1 ? (full - knee) / ($0 - fastToKnee) : nil } ?? avg / 2
+                minutes = (min(target, knee) - remaining) / avg + max(target - knee, 0) / slowRate
+            } else if let toFull, toFull > 0 {
+                minutes = (target - remaining) / ((full - remaining) / toFull)
+            } else if avg > 1 {
+                minutes = (target - remaining) / (avg / 2)
+            }
+            guard let minutes, minutes.isFinite, minutes > 0, minutes < 60 * 24 else { return nil }
+            return max(Int(minutes.rounded()), 1)
         }
     }
 

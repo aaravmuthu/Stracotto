@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// AlDente's charge bar: track, fill with the state glyph centred in it, the percentage just past the end of the
@@ -13,6 +14,12 @@ struct BatteryBar: View {
     var limit: Int? = nil
     var sailingFloor: Int? = nil
     var toppingUp = false
+    /// Makes the limit marker a draggable handle; it snaps to these values (macOS's limit takes 80…100 in 5s).
+    var allowedLimits: [Int] = []
+    var onLimitChange: ((Int) -> Void)? = nil
+
+    @State private var dragging = false
+    @State private var dragLimit: Int?
 
     @State private var sweep: CGFloat = -0.6
     @State private var bounce: CGFloat = 1
@@ -33,7 +40,7 @@ struct BatteryBar: View {
             let width = proxy.size.width
             let fill = max(width * CGFloat(percent) / 100, height * 1.6)
             let labelInside = width - fill < 58
-            let marker = toppingUp ? 100 : limit
+            let marker = toppingUp ? 100 : (dragLimit ?? limit)
 
             ZStack(alignment: .leading) {
                 Capsule(style: .continuous)
@@ -100,11 +107,28 @@ struct BatteryBar: View {
                 if let marker {
                     RoundedRectangle(cornerRadius: 3, style: .continuous)
                         .fill(toppingUp ? Theme.charging.mix(with: .white, by: 0.35) : Color.white.opacity(0.62))
-                        .frame(width: 6, height: height + 11)
+                        .frame(width: dragging ? 8 : 6, height: height + (dragging ? 15 : 11))
                         .shadow(color: toppingUp ? Theme.charging.opacity(0.9) : .black.opacity(0.3), radius: toppingUp ? 6 : 2, y: toppingUp ? 0 : 1)
                         .offset(x: min(max(width * CGFloat(marker) / 100 - 3, 0), width - 6))
                 }
             }
+            .contentShape(.rect)
+            .gesture(onLimitChange == nil || toppingUp ? nil : DragGesture(minimumDistance: 0)
+                .onChanged { value in
+                    if !dragging { withAnimation(.spring(response: 0.25, dampingFraction: 0.7)) { dragging = true } }
+                    let raw = Int((value.location.x / width * 100).rounded())
+                    let snapped = allowedLimits.min { abs($0 - raw) < abs($1 - raw) } ?? raw
+                    if snapped != (dragLimit ?? limit) {
+                        NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { dragLimit = snapped }
+                    }
+                }
+                .onEnded { _ in
+                    if let dragLimit { onLimitChange?(dragLimit) }
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { dragging = false }
+                    dragLimit = nil
+                })
+            .onHover { inside in if onLimitChange != nil { (inside ? NSCursor.resizeLeftRight : NSCursor.arrow).set() } }
         }
         .frame(height: height)
         .padding(.vertical, 6)
