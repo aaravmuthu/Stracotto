@@ -97,7 +97,7 @@ final class Scheduler {
     private func perform(_ action: Action) {
         var note: String?
         switch action {
-        case .setLimit(let v): charge.limit = min(max(v, ChargeController.limitRange.lowerBound), 100)
+        case .setLimit(let v): charge.limit = charge.snapped(v)
         case .topUp: charge.isToppingUp = true
         default:
             if charge.backendStatus != .ready { note = "Skipped: charge control isn't active" }

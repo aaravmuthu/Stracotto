@@ -11,6 +11,8 @@ struct BatteryBar: View {
     /// nil hides the handle (read-only bar).
     var limit: Binding<Int>? = nil
     var limitLocked = false
+    /// Values the limit may take; the handle snaps to the nearest.
+    var allowedLimits: [Int] = Array(20...100)
     /// Sailing Mode's lower bound, drawn as a dashed tick.
     var sailingFloor: Int? = nil
 
@@ -94,14 +96,11 @@ struct BatteryBar: View {
                 dragging = true
                 guard let limit else { return }
                 let raw = Int((value.location.x / width * 100).rounded())
-                let clamped = min(max(raw, ChargeController.limitRange.lowerBound), ChargeController.limitRange.upperBound)
-                if clamped != limit.wrappedValue {
-                    // A tick at the values people aim for.
-                    if [50, 80, 100].contains(clamped) {
-                        NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
-                    }
-                    var t = Transaction(); t.disablesAnimations = true
-                    withTransaction(t) { limit.wrappedValue = clamped }
+                let snapped = allowedLimits.min { abs($0 - raw) < abs($1 - raw) } ?? raw
+                if snapped != limit.wrappedValue {
+                    // A haptic tick on every step, like a detented slider.
+                    NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+                    limit.wrappedValue = snapped
                 }
             }
             .onEnded { _ in dragging = false }

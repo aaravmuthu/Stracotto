@@ -105,25 +105,25 @@ struct ToggleRow: View {
     }
 }
 
-/// Shown on pages whose switches are remembered but don't reach the hardware yet.
+/// Shown on pages whose switches are remembered but not enforced yet. Charge Limit and Top Up are live (macOS's own
+/// limit); the rest needs a control path beyond what MCL offers.
 private struct BackendNotice: View {
     @Environment(ChargeController.self) private var charge
     var body: some View {
-        if case .unavailable(let reason) = charge.backendStatus {
-            Label {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(reason).font(.system(size: 13, weight: .semibold))
-                    Text("Your choices here are saved and take effect as soon as charge control is enabled on macOS 27.")
-                        .font(.system(size: 12)).foregroundStyle(.secondary)
-                }
-            } icon: {
-                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Theme.draining)
+        Label {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(charge.backendStatus == .ready ? "These options are saved but not enforced yet" : "Charge control isn't available on this Mac")
+                    .font(.system(size: 13, weight: .semibold))
+                Text("Charge Limit (80–100%) and Top Up already work through macOS's built-in limit, and stay in sync with System Settings.")
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
             }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .glassCard(radius: 18, tint: Theme.draining.opacity(0.18))
-            .padding(.bottom, 20)
+        } icon: {
+            Image(systemName: "info.circle.fill").foregroundStyle(Theme.paused)
         }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassCard(radius: 18, tint: Theme.paused.opacity(0.15))
+        .padding(.bottom, 20)
     }
 }
 
@@ -137,8 +137,8 @@ private struct DashboardPage: View {
         @Bindable var charge = charge
         let s = monitor.snapshot
         SettingsSection(title: s.state.title, icon: "bolt.fill") {
-            BatteryBar(percent: s.percent, state: s.state, plugEvents: monitor.plugEvents, height: 34,
-                       limit: $charge.limit, limitLocked: charge.isToppingUp)
+            BatteryBar(percent: s.percent, state: s.state, plugEvents: monitor.plugEvents, height: 30,
+                       limit: $charge.limit, limitLocked: charge.isToppingUp, allowedLimits: charge.allowedLimits)
             PowerFlowView(flow: s.flow, state: s.state, adapterWatts: s.adapterWatts, plugEvents: monitor.plugEvents, height: 220)
         }
         SettingsSection(title: "Charge History", icon: "chart.xyaxis.line") {
