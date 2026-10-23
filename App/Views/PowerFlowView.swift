@@ -402,8 +402,9 @@ private struct StageGradient: View {
     let palette: PowerFlowView.Palette
     let watts: Double
 
-    /// Seconds for one wave to cross the stage; more power moves faster.
-    private var period: Double { 3.6 / min(max(watts / 12, 0.6), 2.0) }
+    /// Seconds for one wave to cross the stage. Fixed: tying it to live watts made the phase jump every time a new
+    /// reading arrived, which read as stutter.
+    private let period: Double = 1.6
 
     /// AlDente's static wash, as (colour, opacity, location).
     private var base: [(Color, Double, Double)] {
@@ -414,7 +415,7 @@ private struct StageGradient: View {
     }
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 60)) { context in
+        TimelineView(.animation) { context in
             let phase = (context.date.timeIntervalSinceReferenceDate / period).truncatingRemainder(dividingBy: 1)
             LinearGradient(stops: stops(phase: phase), startPoint: .leading, endPoint: .trailing)
         }
@@ -423,14 +424,13 @@ private struct StageGradient: View {
     /// The same gradient, sampled finely, with pulses of its own colour sliding along it toward the Mac (left to
     /// right). Pulses add absolute brightness, so they stay visible even where the wash is faint.
     private func stops(phase: Double) -> [Gradient.Stop] {
-        (0...40).map { i in
-            let x = Double(i) / 40
+        (0...64).map { i in
+            let x = Double(i) / 64
             let (color, opacity) = sample(x)
-            // Two pulses per stage width; smooth, peaky shape so each reads as a travelling packet.
-            let w = 0.5 + 0.5 * cos(2 * .pi * (x * 2 - phase * 2))
-            let pulse = pow(w, 3)
-            let accent = palette.accent
-            return .init(color: color.mix(with: accent, by: pulse * 0.6).opacity(min(opacity + 0.30 * pulse, 1)), location: x)
+            // One long, gentle sine swell per stage width: no sharp peaks, so it glides instead of pulsing.
+            let w = 0.5 + 0.5 * cos(2 * .pi * (x - phase))
+            let pulse = w * w * (3 - 2 * w)   // smoothstep: soft shoulders
+            return .init(color: color.mix(with: palette.accent, by: pulse * 0.45).opacity(min(opacity + 0.22 * pulse, 1)), location: x)
         }
     }
 
