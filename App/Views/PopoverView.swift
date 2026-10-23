@@ -10,6 +10,8 @@ struct PopoverView: View {
     @AppStorage(Prefs.showEnergyApps) private var showEnergyApps = true
     @AppStorage(AppearancePrefs.showPowerMode) private var showPowerMode = true
     @AppStorage(ChargePrefs.sailing) private var sailing = false
+    @AppStorage("tip.replaceSystemBattery") private var showReplaceTip = true
+    @State private var appleIconShown = SystemBatteryIcon.isShown
     @AppStorage(ChargePrefs.sailingRange) private var sailingRange = 5.0
 
     var body: some View {
@@ -17,6 +19,29 @@ struct PopoverView: View {
         @Bindable var charge = charge
         Group { // no GlassEffectContainer: it composites glass above labels
         VStack(spacing: 0) {
+            if showReplaceTip && appleIconShown {
+                HStack(spacing: 10) {
+                    Image(systemName: "menubar.arrow.up.rectangle").font(.system(size: 15)).foregroundStyle(Theme.paused)
+                    Text("Hide macOS's battery icon so Stracotto replaces it")
+                        .font(.system(size: 12, weight: .medium))
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 4)
+                    Button("Open") { SystemBatteryIcon.openSettings() }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 12, weight: .semibold))
+                        .padding(.horizontal, 10).frame(height: 24)
+                        .liquidGlass(tint: Theme.paused.opacity(0.5), interactive: true, in: .capsule)
+                    Button { withAnimation(.smooth) { showReplaceTip = false } } label: {
+                        Image(systemName: "xmark").font(.system(size: 10, weight: .bold)).foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 12).padding(.vertical, 8)
+                .liquidGlass(in: .rect(cornerRadius: 14, style: .continuous))
+                .padding(.bottom, 12)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+                .onAppear { appleIconShown = SystemBatteryIcon.isShown }
+            }
             HStack(spacing: 8) {
                 // AlDente's Limit chip; on macOS 27 the hardware limit only takes 5% steps from 80, so it's a menu.
                 Menu {

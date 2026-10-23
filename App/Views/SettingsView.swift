@@ -357,10 +357,11 @@ private struct AppearancePage: View {
     @AppStorage(AppearancePrefs.mode) private var mode = "system"
     @AppStorage(AppearancePrefs.reduceTransparency) private var reduceTransparency = false
     @AppStorage(AppearancePrefs.liquidGlass) private var liquidGlass = false
-    @AppStorage(AppearancePrefs.iconStyle) private var iconStyle = MenuBarStyle.pot.rawValue
+    @AppStorage(AppearancePrefs.iconStyle) private var iconStyle = MenuBarStyle.native.rawValue
     @AppStorage(AppearancePrefs.stats) private var stats = ""
     @AppStorage(AppearancePrefs.rightClick) private var rightClick = RightClickAction.dashboard.rawValue
     @AppStorage(Prefs.menuBarEnergyAlert) private var showEnergyAlert = true
+    @State private var appleIconShown = SystemBatteryIcon.isShown
     @AppStorage(Prefs.showPowerFlow) private var showPowerFlow = true
     @AppStorage(AppearancePrefs.showPowerMode) private var showPowerMode = true
     @AppStorage(Prefs.showEnergyApps) private var showEnergyApps = true
@@ -383,6 +384,20 @@ private struct AppearancePage: View {
                       help: "Uses solid surfaces everywhere.", isOn: $reduceTransparency)
         }
         SettingsSection(title: "Menubar", icon: "menubar.rectangle") {
+            HStack(spacing: 8) {
+                Label("Replace macOS Battery Icon", systemImage: "menubar.arrow.up.rectangle").font(.system(size: 13, weight: .semibold))
+                Image(systemName: "questionmark.circle").foregroundStyle(.tertiary)
+                    .help("Stracotto sits where macOS's battery icon was. Turn off Battery → Show in Menu Bar in Control Center so only Stracotto's shows.")
+                Spacer()
+                Text(appleIconShown ? "macOS icon still shown" : "Replaced")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(appleIconShown ? Theme.draining : Theme.charging)
+                Button("Open Control Center Settings") { SystemBatteryIcon.openSettings() }.buttonStyle(.glass)
+            }
+            .onAppear { appleIconShown = SystemBatteryIcon.isShown }
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                appleIconShown = SystemBatteryIcon.isShown
+            }
             Picker(selection: $iconStyle) {
                 ForEach(MenuBarStyle.allCases) { Text($0.title).tag($0.rawValue) }
             } label: { Label("Main Icon Style", systemImage: "battery.75percent").font(.system(size: 13, weight: .semibold)) }
@@ -390,7 +405,7 @@ private struct AppearancePage: View {
                 ForEach(Array([(PowerState.charging, 46), (.paused, 80), (.onBattery, 64), (.onBattery, 14)].enumerated()), id: \.offset) { _, item in
                     let (state, level) = item
                     VStack(spacing: 10) {
-                        MenuBarGlyph(style: MenuBarStyle(rawValue: iconStyle) ?? .pot, percent: level, state: state, plugEvents: 0)
+                        MenuBarGlyph(style: MenuBarStyle(rawValue: iconStyle) ?? .native, percent: level, state: state, plugEvents: 0)
                             .scaleEffect(1.6).frame(height: 26)
                         Text(level < 20 ? "Low" : state.title).font(.system(size: 10)).foregroundStyle(.secondary)
                     }

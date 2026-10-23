@@ -47,7 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 /// Owns the status item, its popover, and the settings window.
 @MainActor
 final class StatusController: NSObject, NSPopoverDelegate {
-    private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+    private let statusItem: NSStatusItem
     private let popover = NSPopover()
     private var settingsWindow: NSWindow?
     private let battery: BatteryMonitor
@@ -60,6 +60,7 @@ final class StatusController: NSObject, NSPopoverDelegate {
         self.energy = energy
         self.charge = charge
         self.scheduler = Scheduler(charge: charge)
+        statusItem = SystemBatteryIcon.makeStatusItem()
         super.init()
         battery.onUpdate = { [weak charge] snapshot in charge?.batteryChanged(snapshot) }
 
