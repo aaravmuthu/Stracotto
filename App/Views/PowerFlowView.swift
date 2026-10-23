@@ -57,9 +57,18 @@ struct PowerFlowView: View {
                 // Each stage's ribbons are unioned into one slab, so flows that share a node read as one shape that
                 // peels into branches (dark wedges only where they separate), exactly like AlDente.
                 ForEach(0..<2, id: \.self) { stage in
-                    let shape = StageShape(ribbons: links.filter { $0.from.column == stage }.map { link in
+                    let stageLinks = links.filter { $0.from.column == stage }
+                    let shape = StageShape(ribbons: stageLinks.map { link in
                         let a = layout.end(link.id, source: true), b = layout.end(link.id, source: false)
                         return link.watts >= 0.01 ? [a.lowerBound, a.upperBound, b.lowerBound, b.upperBound] : [0, 0, 0, 0]
+                    }, corners: stageLinks.map { link in
+                        // Round only where the ribbon meets a node's outer edge; inner edges stay square so neighbours fuse.
+                        let a = layout.end(link.id, source: true), b = layout.end(link.id, source: false)
+                        let from = layout.node(link.from), to = layout.node(link.to)
+                        return RibbonShape.Corners(top0: abs(a.lowerBound - from.lowerBound) < 0.5,
+                                                   bottom0: abs(a.upperBound - from.upperBound) < 0.5,
+                                                   top1: abs(b.lowerBound - to.lowerBound) < 0.5,
+                                                   bottom1: abs(b.upperBound - to.upperBound) < 0.5)
                     })
                     Color.clear
                         .liquidGlass(tint: stageTint(stage), in: shape)
@@ -292,8 +301,9 @@ private struct FlowStreaks: View {
             GeometryReader { p in
                 ForEach(0..<2, id: \.self) { i in
                     let x = ((phase + CGFloat(i) * 0.5).truncatingRemainder(dividingBy: 1)) * 1.4 - 0.3
-                    LinearGradient(colors: [.clear, color.opacity(color == .white ? 0.09 : 0.32), .clear], startPoint: .leading, endPoint: .trailing)
-                        .frame(width: p.size.width * 0.3)
+                    LinearGradient(colors: [.clear, color.opacity(0.16), color.opacity(0.22), color.opacity(0.16), .clear],
+                                   startPoint: .leading, endPoint: .trailing)
+                        .frame(width: p.size.width * 0.55)
                         .offset(x: x * p.size.width)
                 }
             }
@@ -316,13 +326,14 @@ struct RibbonShape: Shape {
     }
 
     func path(in rect: CGRect) -> Path {
-        // Radius never exceeds a third of the band, so thin ribbons keep straight sides instead of turning into bulbs.
-        func radius(_ thickness: CGFloat, _ on: Bool) -> CGFloat { on ? min(Theme.ribbonRadius, max(thickness, 0) / 3) : 0 }
+        // Radius never exceeds half the band, so thin ribbons end in a neat pill rather than a bulb.
+        func radius(_ thickness: CGFloat, _ on: Bool) -> CGFloat { on ? min(Theme.ribbonRadius, max(thickness, 0) / 2) : 0 }
         let rt0 = radius(bottom0 - top0, corners.top0), rb0 = radius(bottom0 - top0, corners.bottom0)
         let rt1 = radius(bottom1 - top1, corners.top1), rb1 = radius(bottom1 - top1, corners.bottom1)
         let (x0, x1) = (rect.minX, rect.maxX)
-        // Control points at 45% / 55% give a long, even S-curve with horizontal tangents at both ends.
-        let c0 = x0 + (x1 - x0) * 0.45, c1 = x0 + (x1 - x0) * 0.55
+        // Classic Sankey: both control points at the horizontal midpoint, so a branch leaves its node flat, peels away
+        // gradually and settles flat into the next node.
+        let c0 = (x0 + x1) / 2, c1 = c0
         var p = Path()
         p.move(to: CGPoint(x: x0, y: top0 + rt0))
         p.addQuadCurve(to: CGPoint(x: x0 + rt0, y: top0), control: CGPoint(x: x0, y: top0))
@@ -340,8 +351,12 @@ struct RibbonShape: Shape {
 /// All ribbons of one stage as a single unioned shape. Holds a fixed number of ribbons (3) so every edge animates.
 struct StageShape: Shape {
     var edges: EdgeVector
+    var corners: [RibbonShape.Corners]
 
-    init(ribbons: [[CGFloat]]) { edges = EdgeVector(values: ribbons.flatMap { $0 }) }
+    init(ribbons: [[CGFloat]], corners: [RibbonShape.Corners]) {
+        edges = EdgeVector(values: ribbons.flatMap { $0 })
+        self.corners = corners
+    }
 
     var animatableData: EdgeVector {
         get { edges }
@@ -354,9 +369,11 @@ struct StageShape: Shape {
         for i in stride(from: 0, to: v.count - 3, by: 4) {
             let (t0, b0, t1, b1) = (v[i], v[i + 1], v[i + 2], v[i + 3])
             guard b0 - t0 > 0.5 || b1 - t1 > 0.5 else { continue }
-            // Square ends overlapping by a hair, so neighbours fuse with no seam; they only part where the curves do.
-            let ribbon = RibbonShape(top0: t0 - 0.5, bottom0: b0 + 0.5, top1: t1 - 0.5, bottom1: b1 + 0.5,
-                                     corners: .init(top0: false, bottom0: false, top1: false, bottom1: false)).path(in: rect)
+            // Inner edges overlap by a hair so neighbours fuse with no seam; outer corners round like AlDente's.
+            let c = i / 4 < corners.count ? corners[i / 4] : RibbonShape.Corners()
+            let ribbon = RibbonShape(top0: t0 - (c.top0 ? 0 : 0.5), bottom0: b0 + (c.bottom0 ? 0 : 0.5),
+                                     top1: t1 - (c.top1 ? 0 : 0.5), bottom1: b1 + (c.bottom1 ? 0 : 0.5),
+                                     corners: c).path(in: rect)
             result = result.isEmpty ? ribbon : result.union(ribbon)
         }
         return result

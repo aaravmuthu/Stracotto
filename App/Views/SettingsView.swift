@@ -357,7 +357,7 @@ private struct AppearancePage: View {
     @AppStorage(AppearancePrefs.mode) private var mode = "system"
     @AppStorage(AppearancePrefs.reduceTransparency) private var reduceTransparency = false
     @AppStorage(AppearancePrefs.liquidGlass) private var liquidGlass = false
-    @AppStorage(AppearancePrefs.iconStyle) private var iconStyle = MenuBarStyle.native.rawValue
+    @AppStorage(AppearancePrefs.iconStyle) private var iconStyle = MenuBarStyle.pot.rawValue
     @AppStorage(AppearancePrefs.stats) private var stats = ""
     @AppStorage(AppearancePrefs.rightClick) private var rightClick = RightClickAction.dashboard.rawValue
     @AppStorage(Prefs.menuBarEnergyAlert) private var showEnergyAlert = true
@@ -390,7 +390,7 @@ private struct AppearancePage: View {
                 ForEach(Array([(PowerState.charging, 46), (.paused, 80), (.onBattery, 64), (.onBattery, 14)].enumerated()), id: \.offset) { _, item in
                     let (state, level) = item
                     VStack(spacing: 10) {
-                        MenuBarGlyph(style: MenuBarStyle(rawValue: iconStyle) ?? .native, percent: level, state: state, plugEvents: 0)
+                        MenuBarGlyph(style: MenuBarStyle(rawValue: iconStyle) ?? .pot, percent: level, state: state, plugEvents: 0)
                             .scaleEffect(1.6).frame(height: 26)
                         Text(level < 20 ? "Low" : state.title).font(.system(size: 10)).foregroundStyle(.secondary)
                     }

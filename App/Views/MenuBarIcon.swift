@@ -6,7 +6,7 @@ struct MenuBarIcon: View {
     @Environment(BatteryMonitor.self) private var battery
     @Environment(EnergyMonitor.self) private var energy
     @AppStorage(Prefs.menuBarEnergyAlert) private var showEnergyAlert = true
-    @AppStorage(AppearancePrefs.iconStyle) private var iconStyle = MenuBarStyle.native.rawValue
+    @AppStorage(AppearancePrefs.iconStyle) private var iconStyle = MenuBarStyle.pot.rawValue
     @AppStorage(AppearancePrefs.stats) private var statsRaw = ""
 
     /// Width is a pure function of the configuration, never of animated content, so the status item never
@@ -18,7 +18,7 @@ struct MenuBarIcon: View {
     var body: some View {
         let s = battery.snapshot
         let hot = showEnergyAlert && energy.isHot
-        let style = MenuBarStyle(rawValue: iconStyle) ?? .native
+        let style = MenuBarStyle(rawValue: iconStyle) ?? .pot
         let stats = MenuBarStat.parse(statsRaw)
         HStack(spacing: 4) {
             if hot {
@@ -54,6 +54,8 @@ struct MenuBarGlyph: View {
 
     var body: some View {
         switch style {
+        case .pot:
+            PotBattery(percent: percent, state: state, plugEvents: plugEvents)
         case .native:
             AppleBattery(percent: percent, state: state, plugEvents: plugEvents)
         case .status:

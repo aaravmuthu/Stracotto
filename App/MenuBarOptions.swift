@@ -3,10 +3,11 @@ import SwiftUI
 
 /// AlDente's "Main Icon Style" choices.
 enum MenuBarStyle: String, CaseIterable, Identifiable {
-    case native, status, percentage
+    case pot, native, status, percentage
     var id: Self { self }
     var title: String {
         switch self {
+        case .pot: "Stracotto Pot"
         case .native: "iOS Native"
         case .status: "AlDente Status"
         case .percentage: "Percentage Only"
@@ -14,6 +15,7 @@ enum MenuBarStyle: String, CaseIterable, Identifiable {
     }
     var width: CGFloat {
         switch self {
+        case .pot: PotBattery.size.width
         case .native: AppleBattery.size.width
         case .status: 62
         case .percentage: 38

@@ -26,7 +26,7 @@ enum Theme {
 
     static let chipRadius: CGFloat = 16
     static let nodeRadius: CGFloat = 13
-    static let ribbonRadius: CGFloat = 7
+    static let ribbonRadius: CGFloat = 11
 
     /// One spring for everything so the bar, ribbons and numbers settle together.
     static let spring = Animation.spring(response: 0.55, dampingFraction: 0.82)
@@ -122,27 +122,36 @@ private struct LiquidGlass<S: Shape>: ViewModifier {
             // 49-grey background.
             content.background {
                 shape.fill(Theme.slab.mix(with: tint ?? .clear, by: tint == nil ? 0 : 0.55))
+                    // Glass body: a soft sheen that fades from the top, darkening slightly toward the bottom.
+                    .overlay {
+                        shape.fill(LinearGradient(stops: [
+                            .init(color: .white.opacity(0.07), location: 0),
+                            .init(color: .white.opacity(0.015), location: 0.45),
+                            .init(color: .black.opacity(0.04), location: 1),
+                        ], startPoint: .top, endPoint: .bottom))
+                    }
                     // Inner glow just inside the top and bottom rims (88 → 67 over a few px in AlDente).
                     .overlay {
                         GeometryReader { g in
-                            let fade = min(7 / max(g.size.height, 1), 0.3)
+                            let fade = min(8 / max(g.size.height, 1), 0.3)
                             shape.fill(LinearGradient(stops: [
-                                .init(color: .white.opacity(0.09), location: 0),
+                                .init(color: .white.opacity(0.13), location: 0),
                                 .init(color: .clear, location: fade),
                                 .init(color: .clear, location: 1 - fade),
-                                .init(color: .white.opacity(0.11), location: 1),
+                                .init(color: .white.opacity(0.12), location: 1),
                             ], startPoint: .top, endPoint: .bottom))
                         }
                     }
+                    // Specular rim: bright along the top, lit along the bottom, barely there on the sides.
                     .overlay {
                         shape.stroke(LinearGradient(stops: [
-                            .init(color: .white.opacity(0.36), location: 0),
-                            .init(color: .white.opacity(0.04), location: 0.1),
-                            .init(color: .white.opacity(0.04), location: 0.9),
-                            .init(color: .white.opacity(0.33), location: 1),
+                            .init(color: .white.opacity(0.48), location: 0),
+                            .init(color: .white.opacity(0.06), location: 0.12),
+                            .init(color: .white.opacity(0.06), location: 0.88),
+                            .init(color: .white.opacity(0.38), location: 1),
                         ], startPoint: .top, endPoint: .bottom), lineWidth: 1.2)
                     }
-                    .shadow(color: .black.opacity(0.4), radius: 1.6)
+                    .shadow(color: .black.opacity(0.42), radius: 1.6)
             }
         }
     }
