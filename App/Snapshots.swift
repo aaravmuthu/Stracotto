@@ -28,7 +28,10 @@ enum Snapshots {
         reference.cycleCount = 558; reference.health = 79; reference.fullChargeCapacity = 4779; reference.temperature = 28.1
         reference.amperage = -1.76; reference.voltage = 11.0
         reference.flow = PowerFlow(adapterToSystem: 0, adapterToBattery: 0, batteryToSystem: 19.4, systemLoad: 14.62, soc: 1.55, display: 1.46)
-        return [("charging", charging), ("paused", paused), ("draining", draining), ("battery", battery), ("reference", reference)]
+        var low = reference
+        low.percent = 8; low.minutesRemaining = 24; low.amperage = -1.46; low.voltage = 10.74
+        low.flow = PowerFlow(adapterToSystem: 0, adapterToBattery: 0, batteryToSystem: 15.7, systemLoad: 16.31, soc: nil, display: 2.21)
+        return [("charging", charging), ("paused", paused), ("draining", draining), ("battery", battery), ("reference", reference), ("low", low)]
     }
 
     @MainActor private static var previewWindow: NSWindow?

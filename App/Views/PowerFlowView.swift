@@ -71,33 +71,16 @@ struct PowerFlowView: View {
                                                    bottom1: abs(b.upperBound - to.upperBound) < 0.5)
                     })
                     Color.clear
-                        .liquidGlass(tint: stageTint(stage), in: shape)
+                        .liquidGlass(in: shape)
                         .frame(width: ribbonWidth, height: size.height)
                         .offset(x: ribbonX[stage])
-                }
-
-                ForEach(links) { link in
-                    let stage = link.from.column
-                    let a = layout.end(link.id, source: true), b = layout.end(link.id, source: false)
-                    // Only corners on a node's outer edge round off; where two ribbons share a node they join flush, so a
-                    // splitting flow reads as one smooth shape (as in AlDente) instead of notched pieces.
-                    let from = layout.node(link.from), to = layout.node(link.to)
-                    let ribbon = RibbonShape(top0: a.lowerBound, bottom0: a.upperBound, top1: b.lowerBound, bottom1: b.upperBound,
-                                             corners: .init(top0: abs(a.lowerBound - from.lowerBound) < 0.5,
-                                                            bottom0: abs(a.upperBound - from.upperBound) < 0.5,
-                                                            top1: abs(b.lowerBound - to.lowerBound) < 0.5,
-                                                            bottom1: abs(b.upperBound - to.upperBound) < 0.5))
-                    // Glass content stays static; the moving streaks live in a separate layer above it, so the
-                    // glass isn't recomposited every frame (that recompositing was the stutter).
-                    // Only charger and charging flows carry moving colour; plain flows stay flat like AlDente's.
-                    if link.watts >= 0.01, let color = streakColor(for: link) {
-                        FlowStreaks(watts: link.watts, color: color)
-                            .clipShape(ribbon)
-                            .frame(width: ribbonWidth, height: size.height)
-                            .offset(x: ribbonX[stage])
-                            .allowsHitTesting(false)
-                            .transition(.opacity)
-                    }
+                    // AlDente's colour wash: energy turns blue as it reaches the Mac and fades out toward the consumers.
+                    // While charging it flows (green/gold) instead of sitting still.
+                    StageGradient(stage: stage, palette: palette, flowing: state == .charging || state == .pluggedDraining)
+                        .clipShape(shape)
+                        .frame(width: ribbonWidth, height: size.height)
+                        .offset(x: ribbonX[stage])
+                        .allowsHitTesting(false)
                 }
 
                 ForEach(Node.allCases, id: \.self) { node in
@@ -152,6 +135,18 @@ struct PowerFlowView: View {
         }
     }
 
+    /// Colours for the wash: where energy comes from, and what it becomes at the Mac.
+    struct Palette: Equatable { let source: Color; let accent: Color }
+
+    private var palette: Palette {
+        switch state {
+        case .charging: Palette(source: Theme.bolt, accent: Theme.charging)
+        case .pluggedDraining: Palette(source: Theme.bolt, accent: Theme.flowBlue)
+        case .paused: Palette(source: Theme.bolt, accent: Theme.flowBlue)
+        case .onBattery: Palette(source: Theme.batteryWarm, accent: Theme.flowBlue)
+        }
+    }
+
     private func stageTint(_ stage: Int) -> Color? {
         guard stage == 0 else { return nil }
         if state == .pluggedDraining { return Theme.paused.opacity(0.35) }
@@ -178,10 +173,10 @@ struct PowerFlowView: View {
                 if let adapterWatts, height > 80 { Text("\(adapterWatts)W").font(.system(size: 13)) }
             case .batteryOut: Image(systemName: "battery.100percent").font(.system(size: iconSize))
             case .batteryIn: Image(systemName: "battery.100percent.bolt").font(.system(size: iconSize))
-            case .mac: Image(systemName: "laptopcomputer").font(.system(size: iconSize))
-            case .soc: Image(systemName: "cpu").font(.system(size: iconSize))
-            case .display: Image(systemName: "display").font(.system(size: iconSize))
-            case .other: Image(systemName: "ellipsis").font(.system(size: iconSize, weight: .bold))
+            case .mac: Image(systemName: "laptopcomputer").font(.system(size: iconSize)).foregroundStyle(palette.accent.mix(with: .white, by: 0.25))
+            case .soc: Image(systemName: "cpu").font(.system(size: iconSize)).foregroundStyle(Theme.soc.mix(with: .white, by: 0.3))
+            case .display: Image(systemName: "display").font(.system(size: iconSize)).foregroundStyle(Theme.displayAmber)
+            case .other: Image(systemName: "ellipsis").font(.system(size: iconSize, weight: .bold)).foregroundStyle(Theme.otherMint)
             }
         }
         .fixedSize()
@@ -394,4 +389,49 @@ struct EdgeVector: VectorArithmetic {
     static func - (a: EdgeVector, b: EdgeVector) -> EdgeVector { zip(a, b, -) }
     mutating func scale(by rhs: Double) { values = values.map { $0 * CGFloat(rhs) } }
     var magnitudeSquared: Double { values.reduce(0) { $0 + Double($1 * $1) } }
+}
+
+/// The colour wash over one stage's fused slab. Stage 0 (into the Mac) runs from a faint source tone to the accent at the
+/// Mac; stage 1 (out of the Mac) starts in the accent and fades back to the slab grey toward the consumers.
+/// When `flowing`, the whole wash drifts left to right on a loop and a soft bright band rides along it.
+private struct StageGradient: View {
+    let stage: Int
+    let palette: PowerFlowView.Palette
+    let flowing: Bool
+
+    var body: some View {
+        if flowing {
+            TimelineView(.animation) { context in
+                wash(phase: CGFloat((context.date.timeIntervalSinceReferenceDate / 2.6).truncatingRemainder(dividingBy: 1)))
+            }
+        } else {
+            wash(phase: nil)
+        }
+    }
+
+    private func stops(shift: CGFloat) -> [Gradient.Stop] {
+        let s = palette.source, a = palette.accent
+        let base: [(Color, CGFloat)] = stage == 0
+            ? [(s.opacity(0.10), 0), (s.opacity(0.14), 0.25), (a.opacity(0.22), 0.62), (a.opacity(0.62), 1)]
+            : [(a.opacity(0.66), 0), (a.opacity(0.55), 0.38), (a.opacity(0.16), 0.72), (a.opacity(0.0), 1)]
+        // A flowing wash breathes its accent slightly with the phase so the colour feels alive, not just shifted.
+        let lift = 0.08 * sin(shift * 2 * .pi)
+        return base.map { .init(color: $0.0.opacity(1 + lift), location: $0.1) }
+    }
+
+    private func wash(phase: CGFloat?) -> some View {
+        GeometryReader { g in
+            ZStack {
+                LinearGradient(stops: stops(shift: phase ?? 0), startPoint: .leading, endPoint: .trailing)
+                if let phase {
+                    // Bright band travelling with the energy.
+                    LinearGradient(colors: [.clear, palette.accent.mix(with: .white, by: 0.5).opacity(0.38), .clear],
+                                   startPoint: .leading, endPoint: .trailing)
+                        .frame(width: g.size.width * 0.45)
+                        .offset(x: (phase * 1.6 - 0.45) * g.size.width)
+                        .blendMode(.plusLighter)
+                }
+            }
+        }
+    }
 }

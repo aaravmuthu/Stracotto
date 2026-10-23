@@ -23,6 +23,7 @@ struct BatteryBar: View {
         switch state {
         case .charging: return Theme.charging
         case .paused: return Theme.paused
+        case .onBattery where percent <= 20: return Color(.sRGB, red: 0.92, green: 0.05, blue: 0.10)  // AlDente's low red
         case .pluggedDraining, .onBattery: return Theme.slab   // same grey as the track; only the outline sets it apart
         }
     }
@@ -64,9 +65,21 @@ struct BatteryBar: View {
                 .frame(width: fill, height: height)
                 .clipShape(.capsule(style: .continuous))
                 .liquidGlass(tint: fillColor == Theme.slab ? nil : fillColor, in: Capsule(style: .continuous))
+                .overlay {
+                    // Low battery is a solid red pill like AlDente's, not a tinted slab.
+                    if state == .onBattery && percent <= 20 { Capsule(style: .continuous).fill(fillColor.gradient) }
+                }
                 .shadow(color: Theme.charging.opacity(0.9 * glow), radius: 14 * glow)
                 .shadow(color: Theme.bolt.opacity(0.5 * glow), radius: 4 * glow)
                 .scaleEffect(y: bounce)
+
+                // Fill too short for the glyph: AlDente centres it in the whole bar instead.
+                if fill <= height * 2.2 {
+                    StatusGlyph(state: toppingUp ? .charging : state, size: height * 0.52)
+                        .foregroundStyle(Theme.text)
+                        .frame(width: width)
+                        .transition(.opacity)
+                }
 
                 Text("\(percent)%")
                     .font(.system(size: 14, weight: .semibold))
