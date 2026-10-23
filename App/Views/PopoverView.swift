@@ -9,6 +9,8 @@ struct PopoverView: View {
     @AppStorage(Prefs.showSpecs) private var showSpecs = true
     @AppStorage(Prefs.showEnergyApps) private var showEnergyApps = true
     @AppStorage(AppearancePrefs.showPowerMode) private var showPowerMode = true
+    @AppStorage(ChargePrefs.sailing) private var sailing = false
+    @AppStorage(ChargePrefs.sailingRange) private var sailingRange = 5.0
 
     var body: some View {
         let s = monitor.snapshot
@@ -65,7 +67,10 @@ struct PopoverView: View {
             .font(.system(size: 14))
             .padding(.bottom, 8)
 
-            BatteryBar(percent: s.percent, state: s.state, plugEvents: monitor.plugEvents)
+            BatteryBar(percent: s.percent, state: s.state, plugEvents: monitor.plugEvents,
+                       limit: charge.limit < 100 ? charge.limit : nil,
+                       sailingFloor: sailing ? charge.limit - Int(sailingRange) : nil,
+                       toppingUp: charge.isToppingUp)
 
             if showPowerFlow {
                 PowerFlowView(flow: s.flow, state: s.state, adapterWatts: s.adapterWatts, plugEvents: monitor.plugEvents, height: 181)
@@ -222,7 +227,7 @@ struct SpecsList: View {
     }
 
     private var divider: some View {
-        Rectangle().fill(.primary.opacity(0.15)).frame(height: 0.75).padding(.horizontal, 2).padding(.vertical, 8)
+        Rectangle().fill(.primary.opacity(0.15)).frame(height: 0.75).padding(.horizontal, 2).padding(.vertical, 5)
     }
 
     /// The vertical battery + boxed letter AlDente uses for current, voltage and power.

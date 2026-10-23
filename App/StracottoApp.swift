@@ -88,7 +88,7 @@ final class StatusController: NSObject, NSPopoverDelegate {
             .onGeometryChange(for: CGFloat.self, of: \.size.height) { [weak self] height in self?.resizePopover(to: height) }
             .frame(maxHeight: .infinity, alignment: .top)
             // AlDente's popover is dark and calm; tone down the desktop showing through the popover glass.
-            .background(Color.black.opacity(0.42))
+            .background(Theme.backdrop.opacity(0.94))
             .environment(battery)
             .environment(energy)
             .environment(charge)

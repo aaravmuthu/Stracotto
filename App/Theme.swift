@@ -14,14 +14,17 @@ enum Theme {
     /// Current AlDente fills a discharging battery in neutral glass-gray, not orange.
     static let discharging = Color(white: 0.62)
 
+    /// Slab and backdrop greys sampled from AlDente's popover.
+    static let slab = Color(red: 0.235, green: 0.235, blue: 0.24)
+    static let backdrop = Color(red: 0.118, green: 0.118, blue: 0.122)
     static let chip = Color.primary.opacity(0.07)
     static let track = Color.primary.opacity(0.08)
     static let node = Color.primary.opacity(0.08)
     static let ribbon = Color.primary.opacity(0.10)
 
     static let chipRadius: CGFloat = 16
-    static let nodeRadius: CGFloat = 20
-    static let ribbonRadius: CGFloat = 12
+    static let nodeRadius: CGFloat = 13
+    static let ribbonRadius: CGFloat = 7
 
     /// One spring for everything so the bar, ribbons and numbers settle together.
     static let spring = Animation.spring(response: 0.55, dampingFraction: 0.82)
@@ -105,16 +108,24 @@ private struct LiquidGlass<S: Shape>: ViewModifier {
     let shape: S
     let tint: Color?
     let interactive: Bool
+    @AppStorage(AppearancePrefs.liquidGlass) private var useLiquidGlass = false
     @AppStorage(AppearancePrefs.reduceTransparency) private var reduceTransparency = false
 
     func body(content: Content) -> some View {
-        if Theme.flatGlass || reduceTransparency {
-            content.background {
-                shape.fill(Color(white: 0.30).mix(with: tint ?? .clear, by: tint == nil ? 0 : 0.6))
-                    .overlay { shape.stroke(.white.opacity(0.22), lineWidth: 0.8) }
-            }
-        } else {
+        if useLiquidGlass && !reduceTransparency && !Theme.flatGlass {
             content.glassEffect(Glass.regular.tint(tint).interactive(interactive), in: shape)
+        } else {
+            // AlDente's slab: flat dark fill, a faint top sheen, and a rim that's brighter at the top.
+            content.background {
+                shape.fill(Theme.slab.mix(with: tint ?? .clear, by: tint == nil ? 0 : 0.55))
+                    .overlay {
+                        shape.fill(LinearGradient(colors: [.white.opacity(0.07), .clear], startPoint: .top, endPoint: .center))
+                    }
+                    .overlay {
+                        shape.stroke(LinearGradient(colors: [.white.opacity(0.30), .white.opacity(0.10)], startPoint: .top, endPoint: .bottom),
+                                     lineWidth: 1)
+                    }
+            }
         }
     }
 }

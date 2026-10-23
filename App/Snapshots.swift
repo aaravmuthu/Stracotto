@@ -22,7 +22,13 @@ enum Snapshots {
         battery.flow = PowerFlow(adapterToSystem: 0, adapterToBattery: 0, batteryToSystem: 19.4, systemLoad: 14.62, soc: 1.55, display: 1.46)
         battery.percent = 34
 
-        return [("charging", charging), ("paused", paused), ("draining", draining), ("battery", battery)]
+        // Same numbers as the user's AlDente reference screenshot, for side-by-side comparison.
+        var reference = base
+        reference.percent = 34; reference.state = .onBattery; reference.minutesRemaining = 48; reference.adapterWatts = nil
+        reference.cycleCount = 558; reference.health = 79; reference.fullChargeCapacity = 4779; reference.temperature = 28.1
+        reference.amperage = -1.76; reference.voltage = 11.0
+        reference.flow = PowerFlow(adapterToSystem: 0, adapterToBattery: 0, batteryToSystem: 19.4, systemLoad: 14.62, soc: 1.55, display: 1.46)
+        return [("charging", charging), ("paused", paused), ("draining", draining), ("battery", battery), ("reference", reference)]
     }
 
     @MainActor private static var previewWindow: NSWindow?
@@ -78,7 +84,11 @@ enum Snapshots {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
         let (charging, paused, draining, battery) = { let x = sampleStates(); return (x[0].1, x[1].1, x[2].1, x[3].1) }()
-        for (name, snap) in [("charging", charging), ("paused", paused), ("draining", draining), ("battery", battery)] {
+        UserDefaults.standard.set(true, forKey: ChargePrefs.sailing)
+        UserDefaults.standard.set(5.0, forKey: ChargePrefs.sailingRange)
+        UserDefaults.standard.set(false, forKey: Prefs.showHardwarePercent)
+        UserDefaults.standard.set(false, forKey: AppearancePrefs.showPowerMode)
+        for (name, snap) in sampleStates() {
             let apps = name == "draining" ? [
                 EnergyMonitor.AppEnergy(id: "/Applications/Xcode.app", name: "Xcode", watts: 9.4),
                 EnergyMonitor.AppEnergy(id: "/Applications/Google Chrome.app", name: "Google Chrome", watts: 3.1),
@@ -89,7 +99,7 @@ enum Snapshots {
                 .environment(EnergyMonitor(fixed: apps))
                 .environment(ChargeController())
                 .environment(\.colorScheme, .dark)
-                .background(Color(white: 0.11))
+                .background(Theme.backdrop)
                 .environment(\.colorScheme, .dark)
             let renderer = ImageRenderer(content: view)
             renderer.scale = 2

@@ -89,7 +89,7 @@ struct PowerFlowView: View {
                     if h > 1 {
                         nodeContent(node, height: h)
                             .frame(width: nodeWidth, height: h)
-                            .glassCard(radius: min(Theme.nodeRadius, h / 2))
+                            .glassCard(radius: min(Theme.nodeRadius, h / 2.2))
                             .offset(x: columnX[node.column], y: span.lowerBound)
                             .transition(.opacity.combined(with: .scale(scale: 0.85)))
                     }
@@ -104,10 +104,8 @@ struct PowerFlowView: View {
                             .monospacedDigit()
                             .contentTransition(.numericText(value: link.watts))
                             .fixedSize()
-                            .padding(.horizontal, label.thin ? 6 : 0)
-                            .padding(.vertical, label.thin ? 1.5 : 0)
-                            .background { if label.thin { Capsule().fill(.black.opacity(0.45)) } }
-                            .shadow(color: .black.opacity(0.35), radius: 2, y: 0.5)
+                            .shadow(color: .black.opacity(0.7), radius: 2.5)
+                            .shadow(color: .black.opacity(0.5), radius: 1)
                             .position(x: ribbonX[link.from.column] + ribbonWidth * 0.5, y: label.y)
                             .transition(.opacity)
                     }

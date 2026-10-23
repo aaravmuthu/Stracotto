@@ -19,6 +19,7 @@ enum ChargePrefs {
 enum AppearancePrefs {
     static let mode = "appearance.mode"                 // system | light | dark
     static let reduceTransparency = "appearance.reduceTransparency"
+    static let liquidGlass = "appearance.liquidGlass"
     static let iconStyle = "appearance.iconStyle"       // MenuBarStyle raw value
     static let stats = "appearance.menubarStats"        // comma-separated MenuBarStat raw values
     static let rightClick = "appearance.rightClick"     // RightClickAction raw value
@@ -355,6 +356,7 @@ private struct AutomationsPage: View {
 private struct AppearancePage: View {
     @AppStorage(AppearancePrefs.mode) private var mode = "system"
     @AppStorage(AppearancePrefs.reduceTransparency) private var reduceTransparency = false
+    @AppStorage(AppearancePrefs.liquidGlass) private var liquidGlass = false
     @AppStorage(AppearancePrefs.iconStyle) private var iconStyle = MenuBarStyle.native.rawValue
     @AppStorage(AppearancePrefs.stats) private var stats = ""
     @AppStorage(AppearancePrefs.rightClick) private var rightClick = RightClickAction.dashboard.rawValue
@@ -375,8 +377,10 @@ private struct AppearancePage: View {
             } label: { Label("Appearance", systemImage: "circle.lefthalf.filled").font(.system(size: 13, weight: .semibold)) }
             .pickerStyle(.segmented)
             .onChange(of: mode) { _, m in AppearanceMode.apply(m) }
+            ToggleRow(title: "Liquid Glass Surfaces", icon: "drop.halffull",
+                      help: "Real refractive glass that shows the desktop through. Off matches AlDente's solid slabs.", isOn: $liquidGlass)
             ToggleRow(title: "Reduce Transparency", icon: "square.on.square.dashed",
-                      help: "Uses solid surfaces instead of Liquid Glass.", isOn: $reduceTransparency)
+                      help: "Uses solid surfaces everywhere.", isOn: $reduceTransparency)
         }
         SettingsSection(title: "Menubar", icon: "menubar.rectangle") {
             Picker(selection: $iconStyle) {
