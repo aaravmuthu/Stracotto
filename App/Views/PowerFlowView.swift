@@ -57,15 +57,27 @@ struct PowerFlowView: View {
                 ForEach(links) { link in
                     let stage = link.from.column
                     let a = layout.end(link.id, source: true), b = layout.end(link.id, source: false)
-                    let ribbon = RibbonShape(top0: a.lowerBound, bottom0: a.upperBound, top1: b.lowerBound, bottom1: b.upperBound)
+                    // Only corners on a node's outer edge round off; where two ribbons share a node they join flush, so a
+                    // splitting flow reads as one smooth shape (as in AlDente) instead of notched pieces.
+                    let from = layout.node(link.from), to = layout.node(link.to)
+                    let ribbon = RibbonShape(top0: a.lowerBound, bottom0: a.upperBound, top1: b.lowerBound, bottom1: b.upperBound,
+                                             corners: .init(top0: abs(a.lowerBound - from.lowerBound) < 0.5,
+                                                            bottom0: abs(a.upperBound - from.upperBound) < 0.5,
+                                                            top1: abs(b.lowerBound - to.lowerBound) < 0.5,
+                                                            bottom1: abs(b.upperBound - to.upperBound) < 0.5))
+                    // Glass content stays static; the moving streaks live in a separate layer above it, so the
+                    // glass isn't recomposited every frame (that recompositing was the stutter).
                     Color.clear
-                        .overlay {
-                            FlowStreaks(watts: link.watts, color: streakColor(for: link)).opacity(link.watts >= 0.01 ? 1 : 0).clipShape(ribbon)
-                        }
                         .liquidGlass(tint: ribbonTint(for: link), in: ribbon)
                         .opacity(link.watts >= 0.01 ? 1 : 0)
                         .frame(width: ribbonWidth, height: size.height)
                         .offset(x: ribbonX[stage])
+                    FlowStreaks(watts: link.watts, color: streakColor(for: link))
+                        .clipShape(ribbon)
+                        .opacity(link.watts >= 0.01 ? 1 : 0)
+                        .frame(width: ribbonWidth, height: size.height)
+                        .offset(x: ribbonX[stage])
+                        .allowsHitTesting(false)
                 }
 
                 ForEach(Node.allCases, id: \.self) { node in
@@ -78,27 +90,29 @@ struct PowerFlowView: View {
                         .offset(x: columnX[node.column], y: span.lowerBound)
                 }
 
-                // Labels last, so a thin ribbon's label is never hidden behind the next ribbon.
+                // Labels last and laid out together: always on top, never overlapping, never outside the view.
+                let labels = LabelLayout(links: links, layout: layout, height: size.height)
                 ForEach(links) { link in
-                    let stage = link.from.column
-                    let a = layout.end(link.id, source: true), b = layout.end(link.id, source: false)
-                    // Thick ribbons carry their label inside; thin ones (SoC, display) hang it just under the band.
-                    let thickness = min(a.upperBound - a.lowerBound, b.upperBound - b.lowerBound)
-                    let thin = thickness < 22
-                    let midY = (a.lowerBound + a.upperBound + b.lowerBound + b.upperBound) / 4
-                    Text(Self.watts(link.watts))
-                        .font(.system(size: thin ? 10 : 13.5, weight: .bold))
-                        .monospacedDigit()
-                        .contentTransition(.numericText(value: link.watts))
-                        .fixedSize()
-                        .opacity(link.watts >= 0.01 ? 1 : 0)
-                        .position(x: ribbonX[stage] + ribbonWidth * 0.5, y: thin ? midY + thickness / 2 + 8 : midY)
+                    if let label = labels.position(link.id) {
+                        Text(Self.watts(link.watts))
+                            .font(.system(size: label.thin ? 10.5 : 13.5, weight: .bold))
+                            .monospacedDigit()
+                            .contentTransition(.numericText(value: link.watts))
+                            .fixedSize()
+                            .padding(.horizontal, label.thin ? 6 : 0)
+                            .padding(.vertical, label.thin ? 1.5 : 0)
+                            .background { if label.thin { Capsule().fill(.black.opacity(0.45)) } }
+                            .shadow(color: .black.opacity(0.35), radius: 2, y: 0.5)
+                            .position(x: ribbonX[link.from.column] + ribbonWidth * 0.5, y: label.y)
+                            .transition(.opacity)
+                    }
                 }
             }
         }
         .frame(height: height)
-        .animation(.smooth(duration: 0.7), value: flow)
-        .animation(.smooth(duration: 0.5), value: state)
+        // Readings land every 2 s; a slightly shorter glide keeps shapes in continuous motion instead of stop-start.
+        .animation(.smooth(duration: 1.6), value: flow)
+        .animation(.smooth(duration: 0.6), value: state)
     }
 
     static func watts(_ w: Double) -> String {
@@ -146,6 +160,41 @@ struct PowerFlowView: View {
         }
         .fixedSize()
     }
+}
+
+/// Where each watt label goes. Thick ribbons hold their label at the centre; thin ones hang it just under the band.
+/// Labels in the same stage are then pushed apart so none overlap, and clamped inside the view.
+private struct LabelLayout {
+    struct Label { var y: CGFloat; let thin: Bool }
+    private var labels: [Int: Label] = [:]
+
+    init(links: [PowerFlowView.Link], layout: SankeyLayout, height: CGFloat) {
+        let minGap: CGFloat = 17
+        for stage in 0...1 {
+            var placed: [(id: Int, label: Label)] = links
+                .filter { $0.from.column == stage && $0.watts >= 0.01 }
+                .map { link in
+                    let a = layout.end(link.id, source: true), b = layout.end(link.id, source: false)
+                    let thickness = min(a.upperBound - a.lowerBound, b.upperBound - b.lowerBound)
+                    let mid = (a.lowerBound + a.upperBound + b.lowerBound + b.upperBound) / 4
+                    let thin = thickness < 24
+                    return (link.id, Label(y: thin ? mid + thickness / 2 + 9 : mid, thin: thin))
+                }
+                .sorted { $0.label.y < $1.label.y }
+            for i in placed.indices {
+                placed[i].label.y = max(placed[i].label.y, 9)
+                if i > 0 { placed[i].label.y = max(placed[i].label.y, placed[i - 1].label.y + minGap) }
+            }
+            // If the stack ran off the bottom, slide everything back up.
+            if let last = placed.last, last.label.y > height - 9 {
+                let shift = last.label.y - (height - 9)
+                for i in placed.indices { placed[i].label.y -= shift }
+            }
+            for p in placed { labels[p.id] = p.label }
+        }
+    }
+
+    func position(_ id: Int) -> Label? { labels[id] }
 }
 
 /// Vertical spans for nodes and each link's two ends, proportional to watts.
@@ -236,6 +285,9 @@ private struct FlowStreaks: View {
 /// A band whose two ends can sit at different heights, joined by S-curves. All four edges animate.
 struct RibbonShape: Shape {
     var top0: CGFloat, bottom0: CGFloat, top1: CGFloat, bottom1: CGFloat
+    var corners = Corners()
+
+    struct Corners { var top0 = true, bottom0 = true, top1 = true, bottom1 = true }
 
     var animatableData: AnimatablePair<AnimatablePair<CGFloat, CGFloat>, AnimatablePair<CGFloat, CGFloat>> {
         get { .init(.init(top0, bottom0), .init(top1, bottom1)) }
@@ -243,19 +295,22 @@ struct RibbonShape: Shape {
     }
 
     func path(in rect: CGRect) -> Path {
-        // Corners round off where the ribbon meets a node; the radius shrinks for thin ribbons so ends stay pill-shaped.
-        let r0 = min(Theme.ribbonRadius, max(bottom0 - top0, 0) / 2)
-        let r1 = min(Theme.ribbonRadius, max(bottom1 - top1, 0) / 2)
-        let (x0, x1, midX) = (rect.minX, rect.maxX, rect.midX)
+        // Radius never exceeds a third of the band, so thin ribbons keep straight sides instead of turning into bulbs.
+        func radius(_ thickness: CGFloat, _ on: Bool) -> CGFloat { on ? min(Theme.ribbonRadius, max(thickness, 0) / 3) : 0 }
+        let rt0 = radius(bottom0 - top0, corners.top0), rb0 = radius(bottom0 - top0, corners.bottom0)
+        let rt1 = radius(bottom1 - top1, corners.top1), rb1 = radius(bottom1 - top1, corners.bottom1)
+        let (x0, x1) = (rect.minX, rect.maxX)
+        // Control points at 45% / 55% give a long, even S-curve with horizontal tangents at both ends.
+        let c0 = x0 + (x1 - x0) * 0.45, c1 = x0 + (x1 - x0) * 0.55
         var p = Path()
-        p.move(to: CGPoint(x: x0, y: top0 + r0))
-        p.addQuadCurve(to: CGPoint(x: x0 + r0, y: top0), control: CGPoint(x: x0, y: top0))
-        p.addCurve(to: CGPoint(x: x1 - r1, y: top1), control1: CGPoint(x: midX, y: top0), control2: CGPoint(x: midX, y: top1))
-        p.addQuadCurve(to: CGPoint(x: x1, y: top1 + r1), control: CGPoint(x: x1, y: top1))
-        p.addLine(to: CGPoint(x: x1, y: bottom1 - r1))
-        p.addQuadCurve(to: CGPoint(x: x1 - r1, y: bottom1), control: CGPoint(x: x1, y: bottom1))
-        p.addCurve(to: CGPoint(x: x0 + r0, y: bottom0), control1: CGPoint(x: midX, y: bottom1), control2: CGPoint(x: midX, y: bottom0))
-        p.addQuadCurve(to: CGPoint(x: x0, y: bottom0 - r0), control: CGPoint(x: x0, y: bottom0))
+        p.move(to: CGPoint(x: x0, y: top0 + rt0))
+        p.addQuadCurve(to: CGPoint(x: x0 + rt0, y: top0), control: CGPoint(x: x0, y: top0))
+        p.addCurve(to: CGPoint(x: x1 - rt1, y: top1), control1: CGPoint(x: c0, y: top0), control2: CGPoint(x: c1, y: top1))
+        p.addQuadCurve(to: CGPoint(x: x1, y: top1 + rt1), control: CGPoint(x: x1, y: top1))
+        p.addLine(to: CGPoint(x: x1, y: bottom1 - rb1))
+        p.addQuadCurve(to: CGPoint(x: x1 - rb1, y: bottom1), control: CGPoint(x: x1, y: bottom1))
+        p.addCurve(to: CGPoint(x: x0 + rb0, y: bottom0), control1: CGPoint(x: c1, y: bottom1), control2: CGPoint(x: c0, y: bottom0))
+        p.addQuadCurve(to: CGPoint(x: x0, y: bottom0 - rb0), control: CGPoint(x: x0, y: bottom0))
         p.closeSubpath()
         return p
     }

@@ -44,6 +44,16 @@ struct PowerFlow: Equatable, Sendable {
     var soc: Double?
     var display: Double?
     var adapterIn: Double { adapterToSystem + adapterToBattery }
+
+    func easing(toward target: PowerFlow, by k: Double = 0.55) -> PowerFlow {
+        func ease(_ a: Double, _ b: Double) -> Double { ((a + (b - a) * k) * 100).rounded() / 100 }
+        func ease(_ a: Double?, _ b: Double?) -> Double? { b.map { ease(a ?? $0, $0) } }
+        return PowerFlow(adapterToSystem: ease(adapterToSystem, target.adapterToSystem),
+                         adapterToBattery: ease(adapterToBattery, target.adapterToBattery),
+                         batteryToSystem: ease(batteryToSystem, target.batteryToSystem),
+                         systemLoad: ease(systemLoad, target.systemLoad),
+                         soc: ease(soc, target.soc), display: ease(display, target.display))
+    }
 }
 
 @MainActor @Observable
@@ -107,6 +117,8 @@ final class BatteryMonitor {
         if let soc = SMC.shared?.number("PHPC"), soc > 0, soc < s.flow.systemLoad { s.flow.soc = soc }
         s.lowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
         if s.isPluggedIn && !snapshot.isPluggedIn && !history.isEmpty { plugEvents += 1 }
+        // Ease the flow toward the new reading so the diagram glides; jump straight there when power state changes.
+        if s.state == snapshot.state { s.flow = snapshot.flow.easing(toward: s.flow) }
         snapshot = s
         onUpdate?(s)
 
