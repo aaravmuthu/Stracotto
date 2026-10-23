@@ -19,6 +19,7 @@ targets:
     sources:
       - App
       - Shared
+      - path: Resources/Assets.xcassets
     info:
       path: App/Info.plist
       properties:
@@ -30,4 +31,5 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.aaravmuthu.stracotto
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_APP_SANDBOX: NO

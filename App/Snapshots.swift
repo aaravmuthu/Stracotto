@@ -58,6 +58,14 @@ enum Snapshots {
     @MainActor static func runIfRequested() {
         let args = CommandLine.arguments
         if let i = args.firstIndex(of: "--preview"), i + 1 < args.count { preview(args[i + 1]); return }
+        if let i = args.firstIndex(of: "--export-icon"), i + 1 < args.count {
+            let renderer = ImageRenderer(content: AppIconArt().frame(width: 1024, height: 1024))
+            renderer.scale = 1
+            if let cg = renderer.cgImage {
+                try? NSBitmapImageRep(cgImage: cg).representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: args[i + 1]))
+            }
+            exit(0)
+        }
         if args.contains("--dump") {
             let monitor = BatteryMonitor()
             RunLoop.main.run(until: Date().addingTimeInterval(3)) // let the system_profiler health read land

@@ -82,10 +82,13 @@ struct SettingsView: View {
 private struct SidebarFooter: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+            AppIconArt().frame(width: 36, height: 36)
             VStack(alignment: .leading, spacing: 2) {
                 Text("Stracotto \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")")
                     .font(.system(size: 12, weight: .semibold))
                 Text("github.com/mks909/Stracotto").font(.system(size: 11)).foregroundStyle(Theme.paused)
+            }
             }
             HStack {
                 Button { NSApp.terminate(nil) } label: {
