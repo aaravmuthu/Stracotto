@@ -312,8 +312,24 @@ private struct SankeyLayout {
                     for n in active { heights[n] = minH + max(free, 0) * CGFloat(weight(n) / total) }
                 }
             } else if total > 0 {
-                // Each consumer gets its share of the Mac node's height, but never thinner than an icon bar.
-                for n in active { heights[n] = max(14, mainHeight * CGFloat(weight(n) / total)) }
+                // AlDente's consumer column: the small consumers (CPU, display) stack from the top as slim bars, never
+                // thinner than an icon; "everything else" takes the rest and sits on the bottom edge. This keeps the
+                // branches in the same shape whatever the numbers are.
+                let slim = [PowerFlowView.Node.soc, .display].filter { weight($0) > 0 }
+                var y: CGFloat = 0
+                for n in slim {
+                    let h = min(max(20, mainHeight * CGFloat(weight(n) / total)), height * 0.3)
+                    nodes[n] = y...(y + h)
+                    y += h + nodeGap
+                }
+                if weight(.other) > 0 {
+                    let wanted = mainHeight * CGFloat(weight(.other) / total)
+                    let topLimit = slim.isEmpty ? (height - mainHeight) / 2 : y + nodeGap
+                    let h = slim.isEmpty ? mainHeight : max(min(wanted, height - topLimit), 30)
+                    nodes[.other] = (height - h - (slim.isEmpty ? (height - mainHeight) / 2 : 0))...(height - (slim.isEmpty ? (height - mainHeight) / 2 : 0))
+                }
+                for n in members where nodes[n] == nil { nodes[n] = 0...0 }
+                continue
             }
             let used = heights.values.reduce(0, +)
             let spacing = active.count > 1 ? (height - used) / CGFloat(active.count - 1) : 0

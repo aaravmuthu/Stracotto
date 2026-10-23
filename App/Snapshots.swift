@@ -31,7 +31,11 @@ enum Snapshots {
         var low = reference
         low.percent = 8; low.minutesRemaining = 24; low.amperage = -1.46; low.voltage = 10.74
         low.flow = PowerFlow(adapterToSystem: 0, adapterToBattery: 0, batteryToSystem: 15.7, systemLoad: 16.31, soc: nil, display: 2.21)
-        return [("charging", charging), ("paused", paused), ("draining", draining), ("battery", battery), ("reference", reference), ("low", low)]
+        var live = reference
+        live.percent = 42; live.flow = PowerFlow(adapterToSystem: 0, adapterToBattery: 0, batteryToSystem: 11.2, systemLoad: 11.2, soc: 3.9, display: nil)
+        var heavy = reference
+        heavy.flow = PowerFlow(adapterToSystem: 0, adapterToBattery: 0, batteryToSystem: 24, systemLoad: 24, soc: 13.5, display: 2.0)
+        return [("live", live), ("heavy", heavy), ("charging", charging), ("paused", paused), ("draining", draining), ("battery", battery), ("reference", reference), ("low", low)]
     }
 
     @MainActor private static var previewWindow: NSWindow?
@@ -102,7 +106,7 @@ enum Snapshots {
         Theme.flatGlass = true
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
-        let (charging, paused, draining, battery) = { let x = sampleStates(); return (x[0].1, x[1].1, x[2].1, x[3].1) }()
+        let (charging, paused, draining, battery) = { let x = Dictionary(uniqueKeysWithValues: sampleStates()); return (x["charging"]!, x["paused"]!, x["draining"]!, x["battery"]!) }()
         UserDefaults.standard.set(true, forKey: ChargePrefs.sailing)
         UserDefaults.standard.set(5.0, forKey: ChargePrefs.sailingRange)
         UserDefaults.standard.set(false, forKey: Prefs.showHardwarePercent)
