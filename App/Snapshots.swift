@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// `Simmer --dump` prints the live reading. `Simmer --snapshot <dir>` renders the popover in each power state to PNG and exits. Used to compare against reference shots.
+/// `Stracotto --dump` prints the live reading. `Stracotto --snapshot <dir>` renders the popover in each power state to PNG and exits. Used to compare against reference shots.
 enum Snapshots {
     @MainActor static func runIfRequested() {
         let args = CommandLine.arguments
@@ -33,8 +33,14 @@ enum Snapshots {
         battery.flow = PowerFlow(adapterToSystem: 0, adapterToBattery: 0, batteryToSystem: 18.63, systemLoad: 18.63)
 
         for (name, snap) in [("charging", charging), ("paused", paused), ("draining", draining), ("battery", battery)] {
+            let apps = name == "draining" ? [
+                EnergyMonitor.AppEnergy(id: "/Applications/Xcode.app", name: "Xcode", watts: 9.4),
+                EnergyMonitor.AppEnergy(id: "/Applications/Google Chrome.app", name: "Google Chrome", watts: 3.1),
+                EnergyMonitor.AppEnergy(id: "/System/Applications/Music.app", name: "Music", watts: 1.2),
+            ] : []
             let view = PopoverView()
                 .environment(BatteryMonitor(fixed: snap))
+                .environment(EnergyMonitor(fixed: apps))
                 .background(Color(white: 0.24))
                 .environment(\.colorScheme, .dark)
             let renderer = ImageRenderer(content: view)
@@ -42,6 +48,20 @@ enum Snapshots {
             if let cg = renderer.cgImage {
                 let rep = NSBitmapImageRep(cgImage: cg)
                 try? rep.representation(using: .png, properties: [:])?.write(to: dir.appendingPathComponent("\(name).png"))
+            }
+        }
+        // Menu bar item on a dark and a light bar.
+        for (name, snap, scheme) in [("menubar-charging", charging, ColorScheme.dark), ("menubar-battery-low", { var b = battery; b.percent = 14; return b }(), .light), ("menubar-paused", paused, .dark)] {
+            let bar = MenuBarIcon()
+                .environment(BatteryMonitor(fixed: snap))
+                .environment(EnergyMonitor(fixed: name == "menubar-charging" ? [.init(id: "/Applications/Xcode.app", name: "Xcode", watts: 9)] : []))
+                .padding(6)
+                .background(scheme == .dark ? Color(white: 0.12) : Color(white: 0.92))
+                .environment(\.colorScheme, scheme)
+            let renderer = ImageRenderer(content: bar)
+            renderer.scale = 4
+            if let cg = renderer.cgImage {
+                try? NSBitmapImageRep(cgImage: cg).representation(using: .png, properties: [:])?.write(to: dir.appendingPathComponent("\(name).png"))
             }
         }
         exit(0)

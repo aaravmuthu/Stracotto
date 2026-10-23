@@ -2,9 +2,11 @@ import SwiftUI
 
 struct PopoverView: View {
     @Environment(BatteryMonitor.self) private var monitor
-    @Environment(\.openSettings) private var openSettings
+    @Environment(EnergyMonitor.self) private var energy
+    @Environment(\.showSettings) private var showSettings
     @AppStorage(Prefs.showPowerFlow) private var showPowerFlow = true
     @AppStorage(Prefs.showSpecs) private var showSpecs = true
+    @AppStorage(Prefs.showEnergyApps) private var showEnergyApps = true
 
     var body: some View {
         let s = monitor.snapshot
@@ -25,7 +27,7 @@ struct PopoverView: View {
                     }
                     .transition(.blurReplace)
                 }
-                Button { openSettings(); NSApp.activate() } label: {
+                Button { showSettings() } label: {
                     Image(systemName: "gearshape").font(.system(size: 17)).frame(width: 30, height: 30)
                 }
                 .buttonStyle(.plain)
@@ -34,12 +36,16 @@ struct PopoverView: View {
             }
             .font(.system(size: 14))
 
-            BatteryBar(percent: s.percent, state: s.state)
+            BatteryBar(percent: s.percent, state: s.state, plugEvents: monitor.plugEvents)
 
             if showPowerFlow {
-                PowerFlowView(flow: s.flow, state: s.state, adapterWatts: s.adapterWatts)
+                PowerFlowView(flow: s.flow, state: s.state, adapterWatts: s.adapterWatts, plugEvents: monitor.plugEvents)
                     .padding(.top, 10)
                     .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
+            }
+            if showEnergyApps && !energy.heavyApps.isEmpty {
+                EnergyAppsList(apps: energy.heavyApps)
+                    .transition(.asymmetric(insertion: .push(from: .top).combined(with: .opacity), removal: .opacity))
             }
             if showSpecs {
                 SpecsGrid(snapshot: s)
@@ -51,9 +57,53 @@ struct PopoverView: View {
         .animation(Theme.spring, value: s.minutesRemaining == nil)
         .animation(Theme.spring, value: showPowerFlow)
         .animation(Theme.spring, value: showSpecs)
+        .animation(Theme.spring, value: energy.heavyApps.isEmpty)
     }
 
     static func duration(_ minutes: Int) -> String { "\(minutes / 60):" + String(format: "%02d", minutes % 60) }
+}
+
+/// Like the battery menu's "Using Significant Energy", with live watts. Rows slide and re-sort as load shifts.
+struct EnergyAppsList: View {
+    let apps: [EnergyMonitor.AppEnergy]
+
+    var body: some View {
+        let peak = max(apps.first?.watts ?? 1, EnergyMonitor.hot)
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Using Significant Energy", systemImage: "flame.fill")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .symbolRenderingMode(.multicolor)
+            VStack(spacing: 6) {
+                ForEach(apps) { app in
+                    HStack(spacing: 10) {
+                        Image(nsImage: app.icon).resizable().frame(width: 20, height: 20)
+                        Text(app.name).font(.system(size: 13, weight: .medium)).lineLimit(1)
+                        Spacer(minLength: 8)
+                        GeometryReader { p in
+                            Capsule().fill(Theme.track)
+                                .overlay(alignment: .leading) {
+                                    Capsule()
+                                        .fill(app.watts >= EnergyMonitor.hot ? Theme.draining.gradient : Theme.paused.gradient)
+                                        .frame(width: p.size.width * min(app.watts / peak, 1))
+                                }
+                        }
+                        .frame(width: 70, height: 6)
+                        Text(app.watts.formatted(.number.precision(.fractionLength(1))) + " W")
+                            .font(.system(size: 12, weight: .semibold))
+                            .monospacedDigit()
+                            .contentTransition(.numericText(value: app.watts))
+                            .frame(width: 46, alignment: .trailing)
+                    }
+                    .padding(.horizontal, 10)
+                    .frame(height: 34)
+                    .background(Theme.node, in: .rect(cornerRadius: 10))
+                    .transition(.asymmetric(insertion: .scale(scale: 0.9).combined(with: .opacity), removal: .opacity))
+                }
+            }
+        }
+        .animation(Theme.spring, value: apps)
+    }
 }
 
 /// AlDente's "Specifications" widget: the numbers people actually check.

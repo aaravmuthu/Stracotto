@@ -6,6 +6,7 @@ struct PowerFlowView: View {
     let flow: PowerFlow
     let state: PowerState
     let adapterWatts: Int?
+    var plugEvents = 0
     var height: CGFloat = 150
 
     private let nodeWidth: CGFloat = 50
@@ -40,8 +41,15 @@ struct PowerFlowView: View {
                 ForEach(links) { link in
                     let a = layout.linkSpan(link.id, atSource: true)
                     let b = layout.linkSpan(link.id, atSource: false)
-                    RibbonShape(top0: a.lowerBound, bottom0: a.upperBound, top1: b.lowerBound, bottom1: b.upperBound)
+                    let ribbon = RibbonShape(top0: a.lowerBound, bottom0: a.upperBound, top1: b.lowerBound, bottom1: b.upperBound)
+                    ribbon
                         .fill(ribbonStyle(for: link))
+                        .overlay {
+                            FlowStreaks(watts: link.watts)
+                                .opacity(link.watts >= 0.01 ? 1 : 0)
+                                .clipShape(ribbon)
+                        }
+                        .compositingGroup()
                         .frame(width: ribbonWidth, height: proxy.size.height)
                         .offset(x: ribbonX)
                     Text(link.watts >= 0.01 ? link.watts.formatted(.number.precision(.fractionLength(2))) + " W" : "")
@@ -86,6 +94,7 @@ struct PowerFlowView: View {
                 Image(systemName: "bolt.fill")
                     .font(.system(size: 22, weight: .regular))
                     .foregroundStyle(state == .charging ? Theme.bolt : .primary)
+                    .symbolEffect(.bounce.up.byLayer, value: plugEvents)
                 if let adapterWatts, height > 80 { Text("\(adapterWatts)W").font(.system(size: 15)) }
             case .batteryOut:
                 Image(systemName: "battery.100percent").font(.system(size: 20))
@@ -142,6 +151,30 @@ struct PowerFlowView: View {
 
         func nodeSpan(_ node: Node) -> ClosedRange<CGFloat> { nodes[node] ?? 0...0 }
         func linkSpan(_ id: Int, atSource: Bool) -> ClosedRange<CGFloat> { (atSource ? sourceEnds[id] : sinkEnds[id]) ?? 0...0 }
+    }
+}
+
+/// Soft light bands drifting left to right through a ribbon, so you can see power moving.
+/// Speed follows watts, capped so a 90 W charger doesn't strobe.
+private struct FlowStreaks: View {
+    let watts: Double
+
+    var body: some View {
+        TimelineView(.animation) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            let period = 3.2 / min(max(watts / 12, 0.6), 2.2)
+            let phase = CGFloat((t / period).truncatingRemainder(dividingBy: 1))
+            GeometryReader { p in
+                ForEach(0..<2, id: \.self) { i in
+                    let x = ((phase + CGFloat(i) * 0.5).truncatingRemainder(dividingBy: 1)) * 1.4 - 0.3
+                    LinearGradient(colors: [.clear, .white.opacity(0.07), .clear], startPoint: .leading, endPoint: .trailing)
+                        .frame(width: p.size.width * 0.3)
+                        .offset(x: x * p.size.width)
+                }
+            }
+        }
+        .blendMode(.plusLighter)
+        .allowsHitTesting(false)
     }
 }
 

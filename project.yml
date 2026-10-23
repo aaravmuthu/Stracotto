@@ -1,4 +1,4 @@
-name: Simmer
+name: Stracotto
 options:
   bundleIdPrefix: com.aaravmuthu
   deploymentTarget:
@@ -13,7 +13,7 @@ settings:
     ENABLE_HARDENED_RUNTIME: YES
     MACOSX_DEPLOYMENT_TARGET: "27.0"
 targets:
-  Simmer:
+  Stracotto:
     type: application
     platform: macOS
     sources:
@@ -23,11 +23,11 @@ targets:
       path: App/Info.plist
       properties:
         LSUIElement: true
-        CFBundleDisplayName: Simmer
+        CFBundleDisplayName: Stracotto
         CFBundleShortVersionString: "0.1.0"
         CFBundleVersion: "1"
         NSHumanReadableCopyright: "© 2026 Aarav Muthu"
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.aaravmuthu.simmer
+        PRODUCT_BUNDLE_IDENTIFIER: com.aaravmuthu.stracotto
         ENABLE_APP_SANDBOX: NO

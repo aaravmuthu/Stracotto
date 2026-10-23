@@ -47,6 +47,8 @@ struct PowerFlow: Equatable, Sendable {
 final class BatteryMonitor {
     private(set) var snapshot = BatterySnapshot()
     private(set) var history: [Sample] = []
+    /// Counts charger connections since launch; views replay their plug-in animation when it changes.
+    private(set) var plugEvents = 0
 
     struct Sample: Identifiable, Sendable { let id = UUID(); let date: Date; let percent: Int; let watts: Double }
 
@@ -97,6 +99,7 @@ final class BatteryMonitor {
         }
         s.temperature = Self.smcTemperature() ?? s.temperature
         s.lowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
+        if s.isPluggedIn && !snapshot.isPluggedIn && !history.isEmpty { plugEvents += 1 }
         snapshot = s
 
         let now = Date()

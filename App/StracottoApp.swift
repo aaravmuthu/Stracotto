@@ -1,0 +1,127 @@
+import ServiceManagement
+import SwiftUI
+
+enum Prefs {
+    static let showPowerFlow = "showPowerFlow"
+    static let showSpecs = "showSpecs"
+    static let showEnergyApps = "showEnergyApps"
+    static let showHardwarePercent = "showHardwarePercent"
+    static let menuBarPercent = "menuBarPercent"
+    static let menuBarIcon = "menuBarIcon"
+    static let menuBarEnergyAlert = "menuBarEnergyAlert"
+}
+
+/// A reference type so views compare it by identity instead of re-rendering on every environment pass.
+final class SettingsOpener: Sendable {
+    private let open: @MainActor @Sendable () -> Void
+    init(_ open: @escaping @MainActor @Sendable () -> Void) { self.open = open }
+    @MainActor func callAsFunction() { open() }
+    static let none = SettingsOpener {}
+}
+
+extension EnvironmentValues {
+    @Entry var showSettings: SettingsOpener = .none
+}
+
+@main
+struct StracottoApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
+
+    init() { Snapshots.runIfRequested() }
+
+    // The menu bar item and windows are AppKit-owned (see StatusController); this scene only satisfies App.
+    var body: some Scene { Settings { EmptyView() } }
+}
+
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var status: StatusController?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        status = StatusController(battery: BatteryMonitor(), energy: EnergyMonitor())
+    }
+}
+
+/// Owns the status item, its popover, and the settings window.
+@MainActor
+final class StatusController: NSObject, NSPopoverDelegate {
+    private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+    private let popover = NSPopover()
+    private var settingsWindow: NSWindow?
+    private let battery: BatteryMonitor
+    private let energy: EnergyMonitor
+
+    init(battery: BatteryMonitor, energy: EnergyMonitor) {
+        self.battery = battery
+        self.energy = energy
+        super.init()
+
+        guard let button = statusItem.button else { return }
+        let icon = PassthroughHostingView(rootView: MenuBarIcon()
+            .environment(battery)
+            .environment(energy)
+            .onGeometryChange(for: CGFloat.self, of: \.size.width) { [weak self] width in
+                self?.statusItem.length = ceil(width)
+            })
+        icon.translatesAutoresizingMaskIntoConstraints = false
+        button.addSubview(icon)
+        NSLayoutConstraint.activate([
+            icon.centerXAnchor.constraint(equalTo: button.centerXAnchor),
+            icon.centerYAnchor.constraint(equalTo: button.centerYAnchor),
+        ])
+        button.target = self
+        button.action = #selector(togglePopover)
+
+        let content = NSHostingController(rootView: PopoverView()
+            .environment(battery)
+            .environment(energy)
+            .environment(\.showSettings, SettingsOpener { [weak self] in self?.showSettings() }))
+        content.sizingOptions = .preferredContentSize
+        popover.contentViewController = content
+        popover.behavior = .transient
+        popover.animates = true
+        popover.delegate = self
+    }
+
+    @objc private func togglePopover() {
+        guard let button = statusItem.button else { return }
+        if popover.isShown {
+            popover.performClose(nil)
+        } else {
+            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            popover.contentViewController?.view.window?.makeKey()
+            button.highlight(true)
+        }
+    }
+
+    func popoverDidClose(_ notification: Notification) { statusItem.button?.highlight(false) }
+
+    private func showSettings() {
+        popover.performClose(nil)
+        if settingsWindow == nil {
+            let window = NSWindow(contentViewController: NSHostingController(rootView: SettingsView()
+                .environment(battery)
+                .environment(energy)))
+            window.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
+            window.titlebarAppearsTransparent = true
+            window.title = "Stracotto"
+            window.isReleasedWhenClosed = false
+            window.center()
+            settingsWindow = window
+        }
+        NSApp.activate()
+        settingsWindow?.makeKeyAndOrderFront(nil)
+    }
+}
+
+/// Lets clicks fall through to the status bar button underneath.
+final class PassthroughHostingView<Content: View>: NSHostingView<Content> {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+
+enum LaunchAtLogin {
+    static var isEnabled: Bool { SMAppService.mainApp.status == .enabled }
+    static func set(_ enabled: Bool) {
+        try? enabled ? SMAppService.mainApp.register() : SMAppService.mainApp.unregister()
+    }
+}
