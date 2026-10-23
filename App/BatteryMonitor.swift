@@ -30,6 +30,8 @@ struct BatterySnapshot: Equatable, Sendable {
     var amperage: Double = 0     // A, negative while discharging
     var adapterWatts: Int?
     var adapterName: String?
+    var adapterVoltage: Double?  // V negotiated
+    var adapterCurrent: Double?  // A max
     var lowPowerMode = false
     var flow = PowerFlow()
 }
@@ -164,6 +166,8 @@ final class BatteryMonitor {
         if let t = int(props, "Temperature") { s.temperature = Double(t) / 100 }
         if let w = int(adapter, "Watts"), w > 0 { s.adapterWatts = w }
         s.adapterName = adapter["Name"] as? String
+        if let v = int(adapter, "AdapterVoltage"), v > 0 { s.adapterVoltage = Double(v) / 1000 }
+        if let c = int(adapter, "Current"), c > 0 { s.adapterCurrent = Double(c) / 1000 }
 
         // Signed mW: BatteryPower > 0 means the battery is filling.
         let load = Double(int(telemetry, "SystemLoad") ?? 0) / 1000

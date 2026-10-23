@@ -10,6 +10,9 @@ struct PowerFlowView: View {
     var plugEvents = 0
     var height: CGFloat = 170
 
+    @State private var selected: Node?
+    @State private var selectedRect: CGRect = .zero
+
     enum Node: CaseIterable {
         case adapter, batteryOut, batteryIn, mac, soc, display, other
         var column: Int {
@@ -103,7 +106,20 @@ struct PowerFlowView: View {
                     if h > 1 {
                         nodeContent(node, height: h)
                             .frame(width: nodeWidth, height: h)
-                            .glassCard(radius: min(Theme.nodeRadius, h / 2.2))
+                            .liquidGlass(in: nodeShape(node, h))
+                            .overlay {
+                                if selected == node {
+                                    nodeShape(node, h)
+                                        .stroke(.white.opacity(0.55), lineWidth: 1.5)
+                                }
+                            }
+                            .contentShape(nodeShape(node, h))
+                            .onTapGesture {
+                                selectedRect = CGRect(x: columnX[node.column], y: span.lowerBound, width: nodeWidth, height: h)
+                                selected = node
+                            }
+                            .onHover { inside in if inside { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() } }
+                            .help(node.detailTitle)
                             .offset(x: columnX[node.column], y: span.lowerBound)
                             .transition(.opacity.combined(with: .scale(scale: 0.85)))
                     }
@@ -114,7 +130,7 @@ struct PowerFlowView: View {
                 ForEach(links) { link in
                     if let label = labels.position(link.id) {
                         Text(Self.watts(link.watts))
-                            .font(.system(size: label.thin ? 10.5 : 13.5, weight: .semibold))
+                            .font(.system(size: label.thin ? 12 : 12.5, weight: .semibold))
                             .monospacedDigit()
                             .contentTransition(.numericText(value: link.watts))
                             .fixedSize()
@@ -126,10 +142,24 @@ struct PowerFlowView: View {
                 }
             }
         }
+        .popover(isPresented: Binding(get: { selected != nil }, set: { if !$0 { selected = nil } }),
+                 attachmentAnchor: .rect(.rect(selectedRect)), arrowEdge: .bottom) {
+            if let selected { NodeDetailView(node: selected, flow: flow) }
+        }
         .frame(height: height)
         // Readings land every 2 s; a slightly shorter glide keeps shapes in continuous motion instead of stop-start.
         .animation(.smooth(duration: 1.6), value: flow)
         .animation(.smooth(duration: 0.6), value: state)
+    }
+
+    /// Inner corners are tight; the corners on the diagram's outside edge are much rounder, as in AlDente.
+    private func nodeShape(_ node: Node, _ h: CGFloat) -> UnevenRoundedRectangle {
+        let inner = min(10, h / 2.2), outer = min(24, h / 2.2)
+        switch node.column {
+        case 0: return UnevenRoundedRectangle(topLeadingRadius: outer, bottomLeadingRadius: outer, bottomTrailingRadius: inner, topTrailingRadius: inner, style: .continuous)
+        case 2: return UnevenRoundedRectangle(topLeadingRadius: inner, bottomLeadingRadius: inner, bottomTrailingRadius: h > 60 ? outer : inner, topTrailingRadius: h > 60 ? outer : inner, style: .continuous)
+        default: return UnevenRoundedRectangle(topLeadingRadius: inner, bottomLeadingRadius: inner, bottomTrailingRadius: inner, topTrailingRadius: inner, style: .continuous)
+        }
     }
 
     static func watts(_ w: Double) -> String {
@@ -177,7 +207,7 @@ struct PowerFlowView: View {
 
     @ViewBuilder private func nodeContent(_ node: Node, height: CGFloat) -> some View {
         let small = height < 30
-        let iconSize: CGFloat = small ? 11 : 18
+        let iconSize: CGFloat = small ? 11 : 15
         VStack(spacing: 5) {
             switch node {
             case .adapter:
@@ -186,12 +216,12 @@ struct PowerFlowView: View {
                     .foregroundStyle(state == .charging ? Theme.bolt : .primary)
                     .symbolEffect(.bounce.up.byLayer, value: plugEvents)
                 if let adapterWatts, height > 80 { Text("\(adapterWatts)W").font(.system(size: 13)) }
-            case .batteryOut: Image(systemName: "battery.100percent").font(.system(size: iconSize))
+            case .batteryOut: Image(systemName: "battery.100percent").font(.system(size: iconSize, weight: .light)).foregroundStyle(Theme.text.opacity(0.8))
             case .batteryIn: Image(systemName: "battery.100percent.bolt").font(.system(size: iconSize))
-            case .mac: Image(systemName: "laptopcomputer").font(.system(size: iconSize)).foregroundStyle(palette.accent.mix(with: .white, by: 0.25))
+            case .mac: Image(systemName: "laptopcomputer").font(.system(size: iconSize, weight: .light)).foregroundStyle(palette.accent.mix(with: .white, by: 0.35))
             case .soc: Image(systemName: "cpu").font(.system(size: iconSize)).foregroundStyle(Theme.soc)
-            case .display: Image(systemName: "display").font(.system(size: iconSize)).foregroundStyle(Theme.displayAmber)
-            case .other: Image(systemName: "ellipsis").font(.system(size: iconSize, weight: .bold)).foregroundStyle(Theme.otherMint)
+            case .display: FilledDisplayIcon(size: min(iconSize + 1, max((height - 5) / 0.8, 9)))
+            case .other: Image(systemName: "ellipsis").font(.system(size: iconSize + 1, weight: .medium)).foregroundStyle(Theme.otherMint)
             }
         }
         .fixedSize()
@@ -250,7 +280,7 @@ private struct SankeyLayout {
 
         // AlDente's geometry: a lone source or Mac node is ~70% tall and centred; two nodes in a column split the
         // full height; consumers are sized against the Mac node and spread top-to-bottom over the full height.
-        let mainHeight = (height * 0.69).rounded()
+        let mainHeight = (height * 0.82).rounded()   // measured from AlDente: main nodes 82% tall, centred
         let nodeGap: CGFloat = 10
         for column in 0...2 {
             let members = PowerFlowView.Node.allCases.filter { $0.column == column }
@@ -422,8 +452,8 @@ private struct StageGradient: View {
     private var base: [(Color, Double, Double)] {
         let s = palette.source, a = palette.accent
         return stage == 0
-            ? [(s, 0.10, 0), (s, 0.14, 0.25), (a, 0.22, 0.62), (a, 0.62, 1)]
-            : [(a, 0.66, 0), (a, 0.55, 0.38), (a, 0.16, 0.72), (a, 0.0, 1)]
+            ? [(s, 0.10, 0), (s, 0.13, 0.45), (s, 0.10, 0.72), (a, 0.30, 0.9), (a, 0.55, 1)]
+            : [(a, 0.62, 0), (a, 0.55, 0.3), (a.mix(with: Theme.otherMint, by: 0.45), 0.40, 0.55), (a, 0.10, 0.72), (a, 0.0, 0.82)]
     }
 
     var body: some View {
@@ -452,5 +482,19 @@ private struct StageGradient: View {
         let (c0, o0, l0) = b[i], (c1, o1, l1) = b[i + 1]
         let f = (x - l0) / max(l1 - l0, 0.0001)
         return (c0.mix(with: c1, by: f), o0 + (o1 - o0) * f)
+    }
+}
+
+/// AlDente's display glyph: a filled amber screen on a small stand.
+private struct FilledDisplayIcon: View {
+    let size: CGFloat
+    var body: some View {
+        VStack(spacing: size * 0.06) {
+            RoundedRectangle(cornerRadius: size * 0.1, style: .continuous)
+                .fill(Theme.displayAmber.opacity(0.85))
+                .overlay { RoundedRectangle(cornerRadius: size * 0.1, style: .continuous).stroke(Theme.displayAmber, lineWidth: max(size * 0.07, 1)) }
+                .frame(width: size, height: size * 0.66)
+            Capsule().fill(Theme.displayAmber).frame(width: size * 0.42, height: max(size * 0.07, 1))
+        }
     }
 }

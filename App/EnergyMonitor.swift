@@ -43,6 +43,8 @@ final class EnergyMonitor {
 
     /// Apps above `significant`, heaviest first.
     private(set) var heavyApps: [AppEnergy] = []
+    /// Every app drawing measurable power, heaviest first, for the Power Flow node details.
+    private(set) var topApps: [AppEnergy] = []
     /// True while some app is pulling hard enough to warn about in the menu bar.
     private(set) var isHot = false
 
@@ -89,6 +91,12 @@ final class EnergyMonitor {
             if value > 0.05 { next[id] = (perApp[id]?.name ?? smoothed[id]!.name, value) }
         }
         smoothed = next
+        topApps = next
+            .filter { $0.key != Bundle.main.bundlePath && $0.value.watts >= 0.05 }
+            .map { AppEnergy(id: $0.key, name: $0.value.name, watts: $0.value.watts) }
+            .sorted { $0.watts > $1.watts }
+            .prefix(8)
+            .map { $0 }
         heavyApps = next
             .filter { $0.value.watts >= Self.significant && $0.key != Bundle.main.bundlePath }
             // Bare daemons only show when the user asks for background processes, like AlDente 1.39.
