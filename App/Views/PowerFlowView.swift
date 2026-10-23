@@ -82,6 +82,18 @@ struct PowerFlowView: View {
                         .frame(width: ribbonWidth, height: size.height)
                         .offset(x: ribbonX[stage])
                         .allowsHitTesting(false)
+                    // The branch into the CPU turns purple as it arrives.
+                    if stage == 1, let soc = stageLinks.first(where: { $0.to == .soc && $0.watts >= 0.01 }) {
+                        let a = layout.end(soc.id, source: true), b = layout.end(soc.id, source: false)
+                        LinearGradient(stops: [.init(color: .clear, location: 0.2), .init(color: Theme.soc.opacity(0.55), location: 0.75),
+                                               .init(color: Theme.soc.opacity(0.85), location: 1)],
+                                       startPoint: .leading, endPoint: .trailing)
+                            .clipShape(RibbonShape(top0: a.lowerBound, bottom0: a.upperBound, top1: b.lowerBound, bottom1: b.upperBound))
+                            .clipShape(shape)
+                            .frame(width: ribbonWidth, height: size.height)
+                            .offset(x: ribbonX[stage])
+                            .allowsHitTesting(false)
+                    }
                 }
 
                 ForEach(Node.allCases, id: \.self) { node in

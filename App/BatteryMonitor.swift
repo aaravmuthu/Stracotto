@@ -64,6 +64,10 @@ final class BatteryMonitor {
     private(set) var plugEvents = 0
     /// Called after every refresh; the charge controller listens here.
     @ObservationIgnored var onUpdate: ((BatterySnapshot) -> Void)?
+    /// The level charging stops at (charge limit, or 100 during Top Up); time-to-full counts to this, not to 100 %.
+    @ObservationIgnored var chargeTarget: () -> Int = { 100 }
+    /// Current averaged over ~1 minute (EMA), so time remaining doesn't swing with every momentary spike.
+    @ObservationIgnored private var avgCurrent: Double?
 
     struct Sample: Identifiable, Sendable { let id = UUID(); let date: Date; let percent: Int; let watts: Double }
 
@@ -119,6 +123,7 @@ final class BatteryMonitor {
         if s.isPluggedIn && !snapshot.isPluggedIn && !history.isEmpty { plugEvents += 1 }
         // Ease the flow toward the new reading so the diagram glides; jump straight there when power state changes.
         if s.state == snapshot.state { s.flow = snapshot.flow.easing(toward: s.flow) }
+        s.minutesRemaining = estimateMinutes(s) ?? s.minutesRemaining
         snapshot = s
         onUpdate?(s)
 
@@ -184,6 +189,42 @@ final class BatteryMonitor {
         let minutes = s.state == .charging ? int(props, "AvgTimeToFull") : int(props, "TimeRemaining") ?? int(props, "AvgTimeToEmpty")
         if let minutes, minutes > 0, minutes < 65535, s.state != .paused { s.minutesRemaining = minutes }
         return s
+    }
+
+    // MARK: - Time remaining
+
+    /// Time remaining, from the battery's own gas gauge (it averages current over about a minute, so it's steadier and
+    /// more accurate than any instantaneous reading).
+    /// - On battery: the gauge's time-to-empty as is.
+    /// - Charging: the gauge reports time to 100 %; this rescales it to the charge limit using the gauge's own charge
+    ///   rate, so with an 80 % limit you see the time until charging actually stops.
+    /// Falls back to a ~30 s averaged current from the raw reading when the gauge has no estimate yet.
+    private func estimateMinutes(_ s: BatterySnapshot) -> Int? {
+        let current = s.amperage * 1000   // mA, negative while discharging
+        if s.state != snapshot.state || avgCurrent.map({ ($0 < 0) != (current < 0) }) == true { avgCurrent = nil }
+        avgCurrent = avgCurrent.map { $0 + (current - $0) * 0.07 } ?? current
+        let remaining = Double(s.remainingCapacity), full = Double(s.fullChargeCapacity)
+        guard full > 0 else { return s.minutesRemaining }
+
+        switch s.state {
+        case .paused:
+            return nil
+        case .onBattery, .pluggedDraining:
+            if let gauge = s.minutesRemaining { return gauge }
+            guard let avg = avgCurrent, avg < -50 else { return nil }
+            return Int((remaining / -avg * 60).rounded())
+        case .charging:
+            let target = full * Double(chargeTarget()) / 100
+            let toGo = target - remaining
+            guard toGo > 0 else { return nil }
+            // mAh per minute: from the gauge's time-to-full if it has one, else from averaged current.
+            let rate: Double
+            if let toFull = s.minutesRemaining, toFull > 0 { rate = (full - remaining) / Double(toFull) }
+            else if let avg = avgCurrent, avg > 50 { rate = avg / 60 }
+            else { return nil }
+            let minutes = toGo / rate
+            return minutes.isFinite && minutes > 0 && minutes < 60 * 24 ? max(Int(minutes.rounded()), 1) : nil
+        }
     }
 
     // MARK: - SMC

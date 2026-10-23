@@ -63,6 +63,7 @@ final class StatusController: NSObject, NSPopoverDelegate {
         statusItem = SystemBatteryIcon.makeStatusItem()
         super.init()
         battery.onUpdate = { [weak charge] snapshot in charge?.batteryChanged(snapshot) }
+        battery.chargeTarget = { [weak charge] in charge?.target ?? 100 }
 
         guard let button = statusItem.button else { return }
         let icon = PassthroughHostingView(rootView: MenuBarIcon()
