@@ -13,7 +13,7 @@ struct PopoverView: View {
     var body: some View {
         let s = monitor.snapshot
         @Bindable var charge = charge
-        GlassEffectContainer(spacing: 2) {
+        Group { // no GlassEffectContainer: it composites glass above labels
         VStack(spacing: 0) {
             HStack(spacing: 8) {
                 // AlDente's Limit chip; on macOS 27 the hardware limit only takes 5% steps from 80, so it's a menu.

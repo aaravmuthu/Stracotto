@@ -55,7 +55,7 @@ struct SettingsView: View {
             .safeAreaInset(edge: .bottom) { SidebarFooter() }
         } detail: {
             ScrollView {
-                GlassEffectContainer(spacing: 2) {
+                Group { // no GlassEffectContainer: it composites glass above labels
                     VStack(alignment: .leading, spacing: 0) {
                         switch page {
                         case .dashboard: DashboardPage()

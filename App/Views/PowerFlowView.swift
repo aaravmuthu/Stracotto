@@ -67,27 +67,32 @@ struct PowerFlowView: View {
                                                             bottom1: abs(b.upperBound - to.upperBound) < 0.5))
                     // Glass content stays static; the moving streaks live in a separate layer above it, so the
                     // glass isn't recomposited every frame (that recompositing was the stutter).
-                    Color.clear
-                        .liquidGlass(tint: ribbonTint(for: link), in: ribbon)
-                        .opacity(link.watts >= 0.01 ? 1 : 0)
-                        .frame(width: ribbonWidth, height: size.height)
-                        .offset(x: ribbonX[stage])
-                    FlowStreaks(watts: link.watts, color: streakColor(for: link))
-                        .clipShape(ribbon)
-                        .opacity(link.watts >= 0.01 ? 1 : 0)
-                        .frame(width: ribbonWidth, height: size.height)
-                        .offset(x: ribbonX[stage])
-                        .allowsHitTesting(false)
+                    if link.watts >= 0.01 {
+                        Color.clear
+                            .liquidGlass(tint: ribbonTint(for: link), in: ribbon)
+                            .frame(width: ribbonWidth, height: size.height)
+                            .offset(x: ribbonX[stage])
+                            .transition(.opacity)
+                        FlowStreaks(watts: link.watts, color: streakColor(for: link))
+                            .clipShape(ribbon)
+                            .frame(width: ribbonWidth, height: size.height)
+                            .offset(x: ribbonX[stage])
+                            .allowsHitTesting(false)
+                            .transition(.opacity)
+                    }
                 }
 
                 ForEach(Node.allCases, id: \.self) { node in
                     let span = layout.node(node)
                     let h = span.upperBound - span.lowerBound
-                    nodeContent(node, height: h)
-                        .frame(width: nodeWidth, height: max(h, 0))
-                        .glassCard(radius: min(Theme.nodeRadius, max(h, 0) / 2))
-                        .opacity(h > 1 ? 1 : 0)
-                        .offset(x: columnX[node.column], y: span.lowerBound)
+                    // Glass ignores opacity, so idle nodes are removed rather than faded (else their icons ghost through).
+                    if h > 1 {
+                        nodeContent(node, height: h)
+                            .frame(width: nodeWidth, height: h)
+                            .glassCard(radius: min(Theme.nodeRadius, h / 2))
+                            .offset(x: columnX[node.column], y: span.lowerBound)
+                            .transition(.opacity.combined(with: .scale(scale: 0.85)))
+                    }
                 }
 
                 // Labels last and laid out together: always on top, never overlapping, never outside the view.
