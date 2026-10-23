@@ -48,7 +48,7 @@ struct SettingsView: View {
             }
         } detail: {
             ScrollView {
-                GlassEffectContainer(spacing: 14) {
+                GlassEffectContainer(spacing: 2) {
                     VStack(alignment: .leading, spacing: 0) {
                         switch page {
                         case .dashboard: DashboardPage()
@@ -139,7 +139,7 @@ private struct DashboardPage: View {
         SettingsSection(title: s.state.title, icon: "bolt.fill") {
             BatteryBar(percent: s.percent, state: s.state, plugEvents: monitor.plugEvents, height: 34,
                        limit: $charge.limit, limitLocked: charge.isToppingUp)
-            PowerFlowView(flow: s.flow, state: s.state, adapterWatts: s.adapterWatts, plugEvents: monitor.plugEvents, height: 190)
+            PowerFlowView(flow: s.flow, state: s.state, adapterWatts: s.adapterWatts, plugEvents: monitor.plugEvents, height: 220)
         }
         SettingsSection(title: "Charge History", icon: "chart.xyaxis.line") {
             if monitor.history.count < 2 {

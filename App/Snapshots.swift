@@ -19,7 +19,8 @@ enum Snapshots {
         draining.flow = PowerFlow(adapterToSystem: 28.39, adapterToBattery: 0, batteryToSystem: 32.93, systemLoad: 61.32)
         var battery = base
         battery.percent = 27; battery.state = .onBattery; battery.minutesRemaining = 130; battery.adapterWatts = nil; battery.amperage = -1.48
-        battery.flow = PowerFlow(adapterToSystem: 0, adapterToBattery: 0, batteryToSystem: 18.63, systemLoad: 18.63)
+        battery.flow = PowerFlow(adapterToSystem: 0, adapterToBattery: 0, batteryToSystem: 19.4, systemLoad: 14.62, soc: 1.55, display: 1.46)
+        battery.percent = 34
 
         return [("charging", charging), ("paused", paused), ("draining", draining), ("battery", battery)]
     }
@@ -65,6 +66,7 @@ enum Snapshots {
         }
         guard let i = args.firstIndex(of: "--snapshot"), i + 1 < args.count else { return }
         let dir = URL(fileURLWithPath: args[i + 1])
+        Theme.flatGlass = true
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
         let (charging, paused, draining, battery) = { let x = sampleStates(); return (x[0].1, x[1].1, x[2].1, x[3].1) }()
@@ -79,7 +81,7 @@ enum Snapshots {
                 .environment(EnergyMonitor(fixed: apps))
                 .environment(ChargeController())
                 .environment(\.colorScheme, .dark)
-                .background(Color(white: 0.24))
+                .background(Color(white: 0.11))
                 .environment(\.colorScheme, .dark)
             let renderer = ImageRenderer(content: view)
             renderer.scale = 2

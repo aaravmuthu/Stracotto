@@ -1,6 +1,9 @@
 import SwiftUI
 
 enum Theme {
+    /// Set by the snapshot renderer; see `liquidGlass`.
+    nonisolated(unsafe) static var flatGlass = false
+
     // Sampled from AlDente's popover: charging green, holding blue, draining orange.
     static let charging = Color(red: 0.37, green: 0.67, blue: 0.39)
     static let paused = Color(red: 0.25, green: 0.53, blue: 0.91)
@@ -65,8 +68,9 @@ struct StatusGlyph: View {
                     .font(.system(size: size * 0.72, weight: .heavy))
                     .contentTransition(.symbolEffect(.replace.downUp))
             } else {
-                Image(systemName: "battery.75percent")
-                    .font(.system(size: size, weight: .regular))
+                // AlDente shows a bare dash while running on battery.
+                Image(systemName: "minus")
+                    .font(.system(size: size * 0.95, weight: .heavy))
             }
         }
     }
@@ -76,15 +80,28 @@ struct Chip<Content: View>: View {
     @ViewBuilder var content: Content
     var body: some View {
         content
-            .padding(.horizontal, 13)
-            .frame(height: 32)
-            .glassCard(radius: Theme.chipRadius)
+            .padding(.horizontal, 14)
+            .frame(height: 30)
+            .liquidGlass(in: .capsule)
     }
 }
 
 extension View {
     /// Frosted Liquid Glass with Apple's continuous corners.
     func glassCard(radius: CGFloat, tint: Color? = nil, interactive: Bool = false) -> some View {
-        glassEffect(Glass.regular.tint(tint).interactive(interactive), in: .rect(cornerRadius: radius, style: .continuous))
+        liquidGlass(tint: tint, interactive: interactive, in: .rect(cornerRadius: radius, style: .continuous))
+    }
+
+    /// Every glass surface goes through here. Offscreen snapshots can't render glass, so they get a flat stand-in
+    /// with the same shape, rim and tint.
+    @ViewBuilder func liquidGlass<S: Shape>(tint: Color? = nil, interactive: Bool = false, in shape: S) -> some View {
+        if Theme.flatGlass {
+            background {
+                shape.fill(Color(white: 0.30).mix(with: tint ?? .clear, by: tint == nil ? 0 : 0.6))
+                    .overlay { shape.stroke(.white.opacity(0.22), lineWidth: 0.8) }
+            }
+        } else {
+            glassEffect(Glass.regular.tint(tint).interactive(interactive), in: shape)
+        }
     }
 }

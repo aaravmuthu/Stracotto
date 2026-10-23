@@ -103,6 +103,8 @@ final class BatteryMonitor {
             s.health = Int((Double(s.fullChargeCapacity) / Double(s.designCapacity) * 100).rounded())
         }
         s.temperature = Self.smcTemperature() ?? s.temperature
+        // PHPC tracks CPU/GPU load (3 W idle → 13 W under load on an M3); used as the SoC branch of the flow.
+        if let soc = SMC.shared?.number("PHPC"), soc > 0, soc < s.flow.systemLoad { s.flow.soc = soc }
         s.lowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
         if s.isPluggedIn && !snapshot.isPluggedIn && !history.isEmpty { plugEvents += 1 }
         snapshot = s

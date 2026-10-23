@@ -14,8 +14,8 @@ struct PopoverView: View {
     var body: some View {
         let s = monitor.snapshot
         @Bindable var charge = charge
-        GlassEffectContainer(spacing: 10) {
-        VStack(spacing: 18) {
+        GlassEffectContainer(spacing: 2) {
+        VStack(spacing: 0) {
             HStack(spacing: 8) {
                 Chip {
                     HStack(spacing: 4) {
@@ -33,42 +33,47 @@ struct PopoverView: View {
                             .font(.system(size: 19, weight: .regular))
                             .contentTransition(.symbolEffect(.replace.magic(fallback: .downUp)))
                     }
-                    .padding(.horizontal, 13)
-                    .frame(height: 32)
+                    .padding(.leading, 14)
+                    .padding(.trailing, 6)
+                    .frame(height: 30)
                 }
                 .buttonStyle(.plain)
-                .glassCard(radius: Theme.chipRadius, tint: charge.isToppingUp ? Theme.charging.opacity(0.55) : nil, interactive: true)
+                .liquidGlass(tint: charge.isToppingUp ? Theme.charging.opacity(0.55) : nil, interactive: true, in: .capsule)
                 .help("Charge to 100% once, until you unplug")
                 Button { showSettings() } label: {
-                    Image(systemName: "square.grid.2x2").font(.system(size: 17)).frame(width: 32, height: 32)
+                    Image(systemName: "square.grid.2x2").font(.system(size: 17)).frame(width: 30, height: 30)
                 }
                 .buttonStyle(.plain)
-                .glassCard(radius: Theme.chipRadius, interactive: true)
+                .liquidGlass(interactive: true, in: .circle)
                 .help("Open Dashboard")
             }
             .font(.system(size: 14))
+            .padding(.bottom, 8)
 
             BatteryBar(percent: s.percent, state: s.state, plugEvents: monitor.plugEvents,
                        limit: $charge.limit, limitLocked: charge.isToppingUp,
                        sailingFloor: sailing ? max(charge.limit - Int(sailingRange), ChargeController.limitRange.lowerBound) : nil)
 
             if showPowerFlow {
-                PowerFlowView(flow: s.flow, state: s.state, adapterWatts: s.adapterWatts, plugEvents: monitor.plugEvents)
-                    .padding(.top, 10)
+                PowerFlowView(flow: s.flow, state: s.state, adapterWatts: s.adapterWatts, plugEvents: monitor.plugEvents, height: 181)
+                    .padding(.top, 20)
                     .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
             }
             if showEnergyApps {
                 EnergyAppsList(apps: energy.heavyApps)
+                    .padding(.top, 18)
                     .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
             }
             if showSpecs {
                 SpecsList(snapshot: s)
+                    .padding(.top, 18)
                     .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
             }
         }
         }
-        .padding(14)
-        .frame(width: 360)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 11)
+        .frame(width: 388)
         .animation(.spring(response: 0.4, dampingFraction: 0.8), value: charge.isToppingUp)
         .animation(Theme.spring, value: s.minutesRemaining == nil)
         .animation(Theme.spring, value: showPowerFlow)
@@ -87,8 +92,8 @@ struct EnergyAppsList: View {
         if apps.isEmpty {
             Text("No Apps Using Significant Energy")
                 .font(.system(size: 13, weight: .semibold))
-                .frame(maxWidth: .infinity, minHeight: 44)
-                .glassCard(radius: 22)
+                .frame(maxWidth: .infinity, minHeight: 45)
+                .liquidGlass(in: .capsule)
         } else {
             list
         }
@@ -141,36 +146,49 @@ struct SpecsList: View {
     var body: some View {
         let s = snapshot
         VStack(spacing: 0) {
-            row("stethoscope", "Maximum Capacity:", "\(s.fullChargeCapacity) mAh", s.health.map { "\($0) %" })
-            row("clock.arrow.circlepath", "Cycle Count:", "\(s.cycleCount)")
-            if showHardwarePercent { row("cpu", "Hardware Percentage:", s.hardwarePercent.formatted(.number.precision(.fractionLength(1))) + " %") }
-            Divider().padding(.vertical, 6)
-            row("thermometer.medium", "Battery Temperature:", s.temperature.map {
-                Measurement(value: $0, unit: UnitTemperature.celsius).formatted(.measurement(width: .abbreviated, numberFormatStyle: .number.precision(.fractionLength(1))))
+            row(Image(systemName: "stethoscope"), "Maximum Capacity:", "\(s.fullChargeCapacity) mAh", s.health.map { "\($0) %" })
+            row(Image(systemName: "clock.arrow.trianglehead.counterclockwise.rotate.90"), "Cycle Count:", "\(s.cycleCount)")
+            if showHardwarePercent { row(Image(systemName: "cpu"), "Hardware Percentage:", s.hardwarePercent.formatted(.number.precision(.fractionLength(1))) + " %") }
+            divider
+            row(Image(systemName: "flame"), "Battery Temperature:", s.temperature.map {
+                Measurement(value: $0, unit: UnitTemperature.celsius)
+                    .formatted(.measurement(width: .abbreviated, usage: .weather, numberFormatStyle: .number.precision(.fractionLength(1))))
             } ?? "--")
-            row("clock", "Time Remaining:", s.minutesRemaining.map(Self.shortDuration) ?? "--")
-            Divider().padding(.vertical, 6)
-            row("i.square", "Current:", s.amperage.formatted(.number.precision(.fractionLength(2))) + " A")
-            row("v.square", "Voltage:", s.voltage.formatted(.number.precision(.fractionLength(s.voltage >= 10 ? 0 : 1))) + " V")
-            row("p.square", "Power:", (s.voltage * s.amperage).formatted(.number.precision(.fractionLength(2))) + " W")
-            row("laptopcomputer", "System Load:", s.flow.systemLoad.formatted(.number.precision(.fractionLength(2))) + " W")
+            row(Image(systemName: "clock"), "Time Remaining:", s.minutesRemaining.map(Self.shortDuration) ?? "--")
+            divider
+            row(batteryLetter("i"), "Current:", s.amperage.formatted(.number.precision(.fractionLength(2))) + " A")
+            row(batteryLetter("u"), "Voltage:", s.voltage.formatted(.number.precision(.fractionLength(0))) + " V")
+            row(batteryLetter("p"), "Power:", (s.voltage * s.amperage).formatted(.number.precision(.fractionLength(2))) + " W")
+            row(Image(systemName: "laptopcomputer"), "System Load:", s.flow.systemLoad.formatted(.number.precision(.fractionLength(2))) + " W")
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 15)
         .padding(.vertical, 12)
-        .glassCard(radius: 20)
+        .liquidGlass(in: .rect(cornerRadius: 24, style: .continuous))
     }
 
-    private func row(_ icon: String, _ title: String, _ value: String, _ extra: String? = nil) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: icon).font(.system(size: 13)).foregroundStyle(.secondary).frame(width: 20)
-            Text(title).font(.system(size: 13))
+    private var divider: some View {
+        Rectangle().fill(.primary.opacity(0.15)).frame(height: 0.75).padding(.horizontal, 2).padding(.vertical, 8)
+    }
+
+    /// The vertical battery + boxed letter AlDente uses for current, voltage and power.
+    private func batteryLetter(_ letter: String) -> some View {
+        HStack(spacing: 2) {
+            Image(systemName: "battery.100percent").rotationEffect(.degrees(-90)).font(.system(size: 11)).frame(width: 7)
+            Image(systemName: "\(letter).square").font(.system(size: 12))
+        }
+    }
+
+    private func row(_ icon: some View, _ title: String, _ value: String, _ extra: String? = nil) -> some View {
+        HStack(spacing: 10) {
+            icon.font(.system(size: 15)).frame(width: 26)
+            Text(title).font(.system(size: 13.5))
             Spacer(minLength: 8)
-            Text(value).font(.system(size: 13, weight: .semibold)).monospacedDigit().contentTransition(.numericText())
+            Text(value).font(.system(size: 13.5, weight: .semibold)).monospacedDigit().contentTransition(.numericText())
             if let extra {
-                Text(extra).font(.system(size: 13, weight: .semibold)).monospacedDigit().frame(width: 44, alignment: .trailing)
+                Text(extra).font(.system(size: 13.5, weight: .semibold)).monospacedDigit().frame(width: 58, alignment: .trailing)
             }
         }
-        .frame(height: 24)
+        .frame(height: 25)
         .animation(.smooth(duration: 0.5), value: value)
     }
 

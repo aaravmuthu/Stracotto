@@ -22,8 +22,8 @@ struct PowerFlowView: View {
     }
     fileprivate struct Link: Identifiable { let id: Int; let from: Node; let to: Node; let watts: Double }
 
-    private let nodeWidth: [CGFloat] = [38, 38, 34]
-    private let gap: CGFloat = 4
+    private let nodeWidth: CGFloat = 43
+    private let gap: CGFloat = 6
 
     private var links: [Link] {
         let consumers = (flow.soc ?? 0) + (flow.display ?? 0)
@@ -47,9 +47,10 @@ struct PowerFlowView: View {
     var body: some View {
         GeometryReader { proxy in
             let size = proxy.size
-            let ribbonWidth = (size.width - nodeWidth.reduce(0, +) - gap * 4) / 2
-            let columnX: [CGFloat] = [0, nodeWidth[0] + gap * 2 + ribbonWidth, size.width - nodeWidth[2]]
-            let ribbonX: [CGFloat] = [nodeWidth[0] + gap, columnX[1] + nodeWidth[1] + gap]
+            // node · ribbon · Mac · ribbons · consumers, each a separate glass slab 6 pt apart.
+            let ribbonWidth = (size.width - nodeWidth * 3 - gap * 4) / 2
+            let columnX: [CGFloat] = [0, nodeWidth + gap * 2 + ribbonWidth, size.width - nodeWidth]
+            let ribbonX: [CGFloat] = [nodeWidth + gap, columnX[1] + nodeWidth + gap]
             let layout = SankeyLayout(links: links, height: size.height)
 
             ZStack(alignment: .topLeading) {
@@ -57,37 +58,41 @@ struct PowerFlowView: View {
                     let stage = link.from.column
                     let a = layout.end(link.id, source: true), b = layout.end(link.id, source: false)
                     let ribbon = RibbonShape(top0: a.lowerBound, bottom0: a.upperBound, top1: b.lowerBound, bottom1: b.upperBound)
-                    ribbon
-                        .fill(ribbonFill(for: link))
-                        .overlay { ribbon.stroke(.white.opacity(0.14), lineWidth: 0.75) }
+                    Color.clear
                         .overlay {
                             FlowStreaks(watts: link.watts).opacity(link.watts >= 0.01 ? 1 : 0).clipShape(ribbon)
                         }
-                        .compositingGroup()
+                        .liquidGlass(tint: ribbonTint(for: link), in: ribbon)
                         .opacity(link.watts >= 0.01 ? 1 : 0)
                         .frame(width: ribbonWidth, height: size.height)
                         .offset(x: ribbonX[stage])
-
-                    let thickness = min(a.upperBound - a.lowerBound, b.upperBound - b.lowerBound)
-                    let thin = thickness < 20
-                    Text(Self.watts(link.watts))
-                        .font(.system(size: thin ? 10 : 14, weight: .bold))
-                        .monospacedDigit()
-                        .contentTransition(.numericText(value: link.watts))
-                        .fixedSize()
-                        .opacity(link.watts >= 0.01 ? 1 : 0)
-                        .position(x: ribbonX[stage] + ribbonWidth * (thin ? 0.68 : 0.5),
-                                  y: thin ? b.lowerBound - 7 : (a.lowerBound + a.upperBound + b.lowerBound + b.upperBound) / 4)
                 }
 
                 ForEach(Node.allCases, id: \.self) { node in
                     let span = layout.node(node)
                     let h = span.upperBound - span.lowerBound
                     nodeContent(node, height: h)
-                        .frame(width: nodeWidth[node.column], height: max(h, 0))
+                        .frame(width: nodeWidth, height: max(h, 0))
                         .glassCard(radius: min(Theme.nodeRadius, max(h, 0) / 2))
                         .opacity(h > 1 ? 1 : 0)
                         .offset(x: columnX[node.column], y: span.lowerBound)
+                }
+
+                // Labels last, so a thin ribbon's label is never hidden behind the next ribbon.
+                ForEach(links) { link in
+                    let stage = link.from.column
+                    let a = layout.end(link.id, source: true), b = layout.end(link.id, source: false)
+                    // Thick ribbons carry their label inside; thin ones (SoC, display) hang it just under the band.
+                    let thickness = min(a.upperBound - a.lowerBound, b.upperBound - b.lowerBound)
+                    let thin = thickness < 22
+                    let midY = (a.lowerBound + a.upperBound + b.lowerBound + b.upperBound) / 4
+                    Text(Self.watts(link.watts))
+                        .font(.system(size: thin ? 10 : 13.5, weight: .bold))
+                        .monospacedDigit()
+                        .contentTransition(.numericText(value: link.watts))
+                        .fixedSize()
+                        .opacity(link.watts >= 0.01 ? 1 : 0)
+                        .position(x: ribbonX[stage] + ribbonWidth * 0.5, y: thin ? midY + thickness / 2 + 8 : midY)
                 }
             }
         }
@@ -101,20 +106,15 @@ struct PowerFlowView: View {
         return w.formatted(.number.precision(.fractionLength(w >= 10 ? 1 : 2))) + " W"
     }
 
-    private func ribbonFill(for link: Link) -> AnyShapeStyle {
-        // Blue wash toward the Mac whenever the battery is helping, like AlDente.
-        if link.from == .batteryOut && state == .pluggedDraining {
-            return AnyShapeStyle(LinearGradient(colors: [Theme.ribbon, Theme.paused.opacity(0.6)], startPoint: .leading, endPoint: .trailing))
-        }
-        if link.to == .batteryIn {
-            return AnyShapeStyle(LinearGradient(colors: [Theme.ribbon, Theme.charging.opacity(0.45)], startPoint: .leading, endPoint: .trailing))
-        }
-        return AnyShapeStyle(Theme.ribbon)
+    private func ribbonTint(for link: Link) -> Color? {
+        if link.from == .batteryOut && state == .pluggedDraining { return Theme.paused.opacity(0.45) }
+        if link.to == .batteryIn { return Theme.charging.opacity(0.35) }
+        return nil
     }
 
     @ViewBuilder private func nodeContent(_ node: Node, height: CGFloat) -> some View {
         let small = height < 30
-        let iconSize: CGFloat = small ? 9 : 17
+        let iconSize: CGFloat = small ? 11 : 18
         VStack(spacing: 5) {
             switch node {
             case .adapter:
@@ -123,7 +123,7 @@ struct PowerFlowView: View {
                     .foregroundStyle(state == .charging ? Theme.bolt : .primary)
                     .symbolEffect(.bounce.up.byLayer, value: plugEvents)
                 if let adapterWatts, height > 80 { Text("\(adapterWatts)W").font(.system(size: 13)) }
-            case .batteryOut: Image(systemName: "battery.75percent").font(.system(size: iconSize))
+            case .batteryOut: Image(systemName: "battery.100percent").font(.system(size: iconSize))
             case .batteryIn: Image(systemName: "battery.100percent.bolt").font(.system(size: iconSize))
             case .mac: Image(systemName: "laptopcomputer").font(.system(size: iconSize))
             case .soc: Image(systemName: "cpu").font(.system(size: iconSize))
@@ -142,34 +142,37 @@ private struct SankeyLayout {
     private var sinkEnds: [Int: ClosedRange<CGFloat>] = [:]
 
     init(links: [PowerFlowView.Link], height: CGFloat) {
-        let nodeGap: CGFloat = 8
-        let minNode: [CGFloat] = [44, 44, 16]
         func incoming(_ n: PowerFlowView.Node) -> Double { links.filter { $0.to == n }.reduce(0) { $0 + $1.watts } }
         func outgoing(_ n: PowerFlowView.Node) -> Double { links.filter { $0.from == n }.reduce(0) { $0 + $1.watts } }
         func weight(_ n: PowerFlowView.Node) -> Double { max(incoming(n), outgoing(n)) }
 
-        // One watts-to-points scale for every column (the tightest one), so a ribbon keeps its thickness from end to
-        // end; columns are bottom-aligned so the Mac and its "everything else" node line up, as in AlDente.
-        let columns = (0...2).map { c in PowerFlowView.Node.allCases.filter { $0.column == c } }
-        let scale = columns.compactMap { members -> CGFloat? in
+        // AlDente's geometry: a lone source or Mac node is ~70% tall and centred; two nodes in a column split the
+        // full height; consumers are sized against the Mac node and spread top-to-bottom over the full height.
+        let mainHeight = (height * 0.69).rounded()
+        let nodeGap: CGFloat = 10
+        for column in 0...2 {
+            let members = PowerFlowView.Node.allCases.filter { $0.column == column }
             let active = members.filter { weight($0) > 0 }
             let total = active.reduce(0) { $0 + weight($1) }
-            guard total > 0 else { return nil }
-            let free = height - nodeGap * CGFloat(max(active.count - 1, 0)) - minNode[members[0].column] * CGFloat(active.count)
-            return max(free, 0) / CGFloat(total)
-        }.min() ?? 0
-
-        for members in columns {
-            let column = members[0].column
-            let active = members.filter { weight($0) > 0 }
-            let used = active.reduce(CGFloat(0)) { $0 + minNode[column] + scale * CGFloat(weight($1)) }
-                + nodeGap * CGFloat(max(active.count - 1, 0))
-            var y = max(height - used, 0)
+            var heights: [PowerFlowView.Node: CGFloat] = [:]
+            if column < 2 {
+                if active.count == 1 { heights[active[0]] = mainHeight }
+                else if total > 0 {
+                    let minH: CGFloat = 44
+                    let free = height - nodeGap * CGFloat(active.count - 1) - minH * CGFloat(active.count)
+                    for n in active { heights[n] = minH + max(free, 0) * CGFloat(weight(n) / total) }
+                }
+            } else if total > 0 {
+                // Each consumer gets its share of the Mac node's height, but never thinner than an icon bar.
+                for n in active { heights[n] = max(14, mainHeight * CGFloat(weight(n) / total)) }
+            }
+            let used = heights.values.reduce(0, +)
+            let spacing = active.count > 1 ? (height - used) / CGFloat(active.count - 1) : 0
+            var y = active.count == 1 ? (height - used) / 2 : 0
             for node in members {
-                guard weight(node) > 0 else { nodes[node] = y...y; continue }
-                let h = minNode[column] + scale * CGFloat(weight(node))
+                guard let h = heights[node] else { nodes[node] = y...y; continue }
                 nodes[node] = y...(y + h)
-                y += h + nodeGap
+                y += h + spacing
             }
         }
         // Each node's links stack top-to-bottom in the order their other ends sit, so ribbons never cross.
