@@ -1,0 +1,33 @@
+name: Simmer
+options:
+  bundleIdPrefix: com.aaravmuthu
+  deploymentTarget:
+    macOS: "27.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    DEVELOPMENT_TEAM: 39QKJR8ATM
+    CODE_SIGN_STYLE: Automatic
+    CODE_SIGN_IDENTITY: "Apple Development"
+    SWIFT_VERSION: "6.0"
+    ENABLE_HARDENED_RUNTIME: YES
+    MACOSX_DEPLOYMENT_TARGET: "27.0"
+targets:
+  Simmer:
+    type: application
+    platform: macOS
+    sources:
+      - App
+      - Shared
+    info:
+      path: App/Info.plist
+      properties:
+        LSUIElement: true
+        CFBundleDisplayName: Simmer
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        NSHumanReadableCopyright: "© 2026 Aarav Muthu"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.aaravmuthu.simmer
+        ENABLE_APP_SANDBOX: NO
