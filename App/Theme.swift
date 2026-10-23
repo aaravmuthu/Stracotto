@@ -6,11 +6,13 @@ enum Theme {
     static let paused = Color(red: 0.25, green: 0.53, blue: 0.91)
     static let draining = Color(red: 0.84, green: 0.57, blue: 0.24)
     static let bolt = Color(red: 0.98, green: 0.80, blue: 0.27)
+    /// Current AlDente fills a discharging battery in neutral glass-gray, not orange.
+    static let discharging = Color(white: 0.62)
 
     static let chip = Color.primary.opacity(0.07)
     static let track = Color.primary.opacity(0.08)
     static let node = Color.primary.opacity(0.08)
-    static let ribbon = Color.primary.opacity(0.06)
+    static let ribbon = Color.primary.opacity(0.10)
 
     static let chipRadius: CGFloat = 16
     static let nodeRadius: CGFloat = 20
@@ -23,7 +25,7 @@ enum Theme {
         switch state {
         case .charging: charging
         case .paused: paused
-        case .pluggedDraining, .onBattery: draining
+        case .pluggedDraining, .onBattery: discharging
         }
     }
 }

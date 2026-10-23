@@ -1,156 +1,195 @@
 import SwiftUI
 
-/// Sankey of power between charger, battery and system, in AlDente's three-column layout.
-/// Every node and ribbon always exists; idle ones collapse to zero height, so state changes morph instead of cut.
+/// AlDente's two-stage Power Flow: sources (charger, battery) → Mac (and battery when charging) → consumers
+/// (SoC, display, everything else). Every node and ribbon always exists; idle ones collapse to zero height,
+/// so state changes morph instead of cutting.
 struct PowerFlowView: View {
     let flow: PowerFlow
     let state: PowerState
     let adapterWatts: Int?
     var plugEvents = 0
-    var height: CGFloat = 150
+    var height: CGFloat = 170
 
-    private let nodeWidth: CGFloat = 50
-    private let columnGap: CGFloat = 5
-    private let nodeGap: CGFloat = 10
-    private let minNode: CGFloat = 44
+    enum Node: CaseIterable {
+        case adapter, batteryOut, batteryIn, mac, soc, display, other
+        var column: Int {
+            switch self {
+            case .adapter, .batteryOut: 0
+            case .batteryIn, .mac: 1
+            case .soc, .display, .other: 2
+            }
+        }
+    }
+    fileprivate struct Link: Identifiable { let id: Int; let from: Node; let to: Node; let watts: Double }
 
-    enum Node: CaseIterable { case adapter, batteryOut, batteryIn, system }
-    private struct Link: Identifiable { let id: Int; let from: Node; let to: Node; let watts: Double }
+    private let nodeWidth: [CGFloat] = [38, 38, 34]
+    private let gap: CGFloat = 4
 
     private var links: [Link] {
+        let consumers = (flow.soc ?? 0) + (flow.display ?? 0)
         var l = [
             Link(id: 0, from: .adapter, to: .batteryIn, watts: flow.adapterToBattery),
-            Link(id: 1, from: .adapter, to: .system, watts: flow.adapterToSystem),
-            Link(id: 2, from: .batteryOut, to: .system, watts: flow.batteryToSystem),
+            Link(id: 1, from: .adapter, to: .mac, watts: flow.adapterToSystem),
+            Link(id: 2, from: .batteryOut, to: .mac, watts: flow.batteryToSystem),
+            Link(id: 3, from: .mac, to: .soc, watts: flow.soc ?? 0),
+            Link(id: 4, from: .mac, to: .display, watts: flow.display ?? 0),
+            Link(id: 5, from: .mac, to: .other, watts: max(flow.systemLoad - consumers, 0)),
         ]
         // Nothing measured yet: still show which way power is meant to go.
-        if l.allSatisfy({ $0.watts < 0.01 }) {
+        if l[0...2].allSatisfy({ $0.watts < 0.01 }) {
             let i = state == .onBattery ? 2 : 1
             l[i] = Link(id: i, from: l[i].from, to: l[i].to, watts: 0.001)
         }
+        if l[3...5].allSatisfy({ $0.watts < 0.01 }) { l[5] = Link(id: 5, from: .mac, to: .other, watts: 0.001) }
         return l
     }
 
     var body: some View {
         GeometryReader { proxy in
-            let layout = Layout(links: links, height: proxy.size.height, nodeGap: nodeGap, minNode: minNode)
-            let ribbonX = nodeWidth + columnGap
-            let ribbonWidth = proxy.size.width - 2 * ribbonX
+            let size = proxy.size
+            let ribbonWidth = (size.width - nodeWidth.reduce(0, +) - gap * 4) / 2
+            let columnX: [CGFloat] = [0, nodeWidth[0] + gap * 2 + ribbonWidth, size.width - nodeWidth[2]]
+            let ribbonX: [CGFloat] = [nodeWidth[0] + gap, columnX[1] + nodeWidth[1] + gap]
+            let layout = SankeyLayout(links: links, height: size.height)
 
             ZStack(alignment: .topLeading) {
                 ForEach(links) { link in
-                    let a = layout.linkSpan(link.id, atSource: true)
-                    let b = layout.linkSpan(link.id, atSource: false)
+                    let stage = link.from.column
+                    let a = layout.end(link.id, source: true), b = layout.end(link.id, source: false)
                     let ribbon = RibbonShape(top0: a.lowerBound, bottom0: a.upperBound, top1: b.lowerBound, bottom1: b.upperBound)
                     ribbon
-                        .fill(ribbonStyle(for: link))
+                        .fill(ribbonFill(for: link))
+                        .overlay { ribbon.stroke(.white.opacity(0.14), lineWidth: 0.75) }
                         .overlay {
-                            FlowStreaks(watts: link.watts)
-                                .opacity(link.watts >= 0.01 ? 1 : 0)
-                                .clipShape(ribbon)
+                            FlowStreaks(watts: link.watts).opacity(link.watts >= 0.01 ? 1 : 0).clipShape(ribbon)
                         }
                         .compositingGroup()
-                        .frame(width: ribbonWidth, height: proxy.size.height)
-                        .offset(x: ribbonX)
-                    Text(link.watts >= 0.01 ? link.watts.formatted(.number.precision(.fractionLength(2))) + " W" : "")
-                        .font(.system(size: 15, weight: .bold))
+                        .opacity(link.watts >= 0.01 ? 1 : 0)
+                        .frame(width: ribbonWidth, height: size.height)
+                        .offset(x: ribbonX[stage])
+
+                    let thickness = min(a.upperBound - a.lowerBound, b.upperBound - b.lowerBound)
+                    let thin = thickness < 20
+                    Text(Self.watts(link.watts))
+                        .font(.system(size: thin ? 10 : 14, weight: .bold))
                         .monospacedDigit()
                         .contentTransition(.numericText(value: link.watts))
-                        .opacity(min(a.upperBound - a.lowerBound, b.upperBound - b.lowerBound) >= 24 ? 1 : 0)
-                        .frame(width: ribbonWidth)
-                        .position(x: ribbonX + ribbonWidth / 2, y: (a.lowerBound + a.upperBound + b.lowerBound + b.upperBound) / 4)
+                        .fixedSize()
+                        .opacity(link.watts >= 0.01 ? 1 : 0)
+                        .position(x: ribbonX[stage] + ribbonWidth * (thin ? 0.68 : 0.5),
+                                  y: thin ? b.lowerBound - 7 : (a.lowerBound + a.upperBound + b.lowerBound + b.upperBound) / 4)
                 }
 
                 ForEach(Node.allCases, id: \.self) { node in
-                    let span = layout.nodeSpan(node)
-                    nodeView(node, height: span.upperBound - span.lowerBound)
-                        .frame(width: nodeWidth, height: max(span.upperBound - span.lowerBound, 0))
-                        .glassCard(radius: Theme.nodeRadius)
-                        .opacity(span.upperBound - span.lowerBound > 1 ? 1 : 0)
-                        .offset(x: isLeft(node) ? 0 : proxy.size.width - nodeWidth, y: span.lowerBound)
+                    let span = layout.node(node)
+                    let h = span.upperBound - span.lowerBound
+                    nodeContent(node, height: h)
+                        .frame(width: nodeWidth[node.column], height: max(h, 0))
+                        .glassCard(radius: min(Theme.nodeRadius, max(h, 0) / 2))
+                        .opacity(h > 1 ? 1 : 0)
+                        .offset(x: columnX[node.column], y: span.lowerBound)
                 }
             }
         }
         .frame(height: height)
-        .animation(Theme.spring, value: flow)
-        .animation(Theme.spring, value: state)
+        .animation(.smooth(duration: 0.7), value: flow)
+        .animation(.smooth(duration: 0.5), value: state)
     }
 
-    private func isLeft(_ node: Node) -> Bool { node == .adapter || node == .batteryOut }
-
-    private func ribbonStyle(for link: Link) -> AnyShapeStyle {
-        // Blue wash toward the Mac whenever the battery is holding or helping, like AlDente.
-        let tinted = state == .paused || state == .pluggedDraining
-        guard tinted else { return AnyShapeStyle(Theme.ribbon) }
-        let strength = link.from == .batteryOut ? 0.7 : 0.35
-        return AnyShapeStyle(LinearGradient(colors: [Theme.ribbon, Theme.paused.opacity(strength)], startPoint: .leading, endPoint: .trailing))
+    static func watts(_ w: Double) -> String {
+        guard w >= 0.01 else { return "" }
+        return w.formatted(.number.precision(.fractionLength(w >= 10 ? 1 : 2))) + " W"
     }
 
-    @ViewBuilder private func nodeView(_ node: Node, height: CGFloat) -> some View {
-        VStack(spacing: 6) {
+    private func ribbonFill(for link: Link) -> AnyShapeStyle {
+        // Blue wash toward the Mac whenever the battery is helping, like AlDente.
+        if link.from == .batteryOut && state == .pluggedDraining {
+            return AnyShapeStyle(LinearGradient(colors: [Theme.ribbon, Theme.paused.opacity(0.6)], startPoint: .leading, endPoint: .trailing))
+        }
+        if link.to == .batteryIn {
+            return AnyShapeStyle(LinearGradient(colors: [Theme.ribbon, Theme.charging.opacity(0.45)], startPoint: .leading, endPoint: .trailing))
+        }
+        return AnyShapeStyle(Theme.ribbon)
+    }
+
+    @ViewBuilder private func nodeContent(_ node: Node, height: CGFloat) -> some View {
+        let small = height < 30
+        let iconSize: CGFloat = small ? 9 : 17
+        VStack(spacing: 5) {
             switch node {
             case .adapter:
                 Image(systemName: "bolt.fill")
-                    .font(.system(size: 22, weight: .regular))
+                    .font(.system(size: iconSize))
                     .foregroundStyle(state == .charging ? Theme.bolt : .primary)
                     .symbolEffect(.bounce.up.byLayer, value: plugEvents)
-                if let adapterWatts, height > 80 { Text("\(adapterWatts)W").font(.system(size: 15)) }
-            case .batteryOut:
-                Image(systemName: "battery.100percent").font(.system(size: 20))
-            case .batteryIn:
-                Image(systemName: "battery.100percent.bolt").font(.system(size: 20))
-            case .system:
-                Image(systemName: "laptopcomputer")
-                    .font(.system(size: 20))
-                    .foregroundStyle(state == .paused || state == .pluggedDraining ? Theme.paused : .primary)
-                if height > 80, links.filter({ $0.to == .system && $0.watts >= 0.01 }).count > 1 {
-                    Text("\(Int(flow.systemLoad.rounded()))W").font(.system(size: 15)).monospacedDigit()
-                        .contentTransition(.numericText(value: flow.systemLoad))
-                }
+                if let adapterWatts, height > 80 { Text("\(adapterWatts)W").font(.system(size: 13)) }
+            case .batteryOut: Image(systemName: "battery.75percent").font(.system(size: iconSize))
+            case .batteryIn: Image(systemName: "battery.100percent.bolt").font(.system(size: iconSize))
+            case .mac: Image(systemName: "laptopcomputer").font(.system(size: iconSize))
+            case .soc: Image(systemName: "cpu").font(.system(size: iconSize))
+            case .display: Image(systemName: "display").font(.system(size: iconSize))
+            case .other: Image(systemName: "ellipsis").font(.system(size: iconSize, weight: .bold))
             }
         }
         .fixedSize()
     }
+}
 
-    /// Vertical spans for nodes and for each link's ends, proportional to watts.
-    private struct Layout {
-        private var nodes: [Node: ClosedRange<CGFloat>] = [:]
-        private var sourceEnds: [Int: ClosedRange<CGFloat>] = [:]
-        private var sinkEnds: [Int: ClosedRange<CGFloat>] = [:]
+/// Vertical spans for nodes and each link's two ends, proportional to watts.
+private struct SankeyLayout {
+    private var nodes: [PowerFlowView.Node: ClosedRange<CGFloat>] = [:]
+    private var sourceEnds: [Int: ClosedRange<CGFloat>] = [:]
+    private var sinkEnds: [Int: ClosedRange<CGFloat>] = [:]
 
-        init(links: [Link], height: CGFloat, nodeGap: CGFloat, minNode: CGFloat) {
-            let weight = { (n: Node) in links.filter { $0.from == n || $0.to == n }.reduce(0) { $0 + $1.watts } }
-            for column in [[Node.adapter, .batteryOut], [.batteryIn, .system]] {
-                let active = column.filter { weight($0) > 0 }
-                let total = active.reduce(0) { $0 + weight($1) }
-                let free = height - nodeGap * CGFloat(max(active.count - 1, 0)) - minNode * CGFloat(active.count)
-                var y: CGFloat = 0
-                for node in column {
-                    guard weight(node) > 0, total > 0 else { nodes[node] = y...y; continue }
-                    let h = minNode + free * CGFloat(weight(node) / total)
-                    nodes[node] = y...(y + h)
-                    y += h + nodeGap
-                }
+    init(links: [PowerFlowView.Link], height: CGFloat) {
+        let nodeGap: CGFloat = 8
+        let minNode: [CGFloat] = [44, 44, 16]
+        func incoming(_ n: PowerFlowView.Node) -> Double { links.filter { $0.to == n }.reduce(0) { $0 + $1.watts } }
+        func outgoing(_ n: PowerFlowView.Node) -> Double { links.filter { $0.from == n }.reduce(0) { $0 + $1.watts } }
+        func weight(_ n: PowerFlowView.Node) -> Double { max(incoming(n), outgoing(n)) }
+
+        // One watts-to-points scale for every column (the tightest one), so a ribbon keeps its thickness from end to
+        // end; columns are bottom-aligned so the Mac and its "everything else" node line up, as in AlDente.
+        let columns = (0...2).map { c in PowerFlowView.Node.allCases.filter { $0.column == c } }
+        let scale = columns.compactMap { members -> CGFloat? in
+            let active = members.filter { weight($0) > 0 }
+            let total = active.reduce(0) { $0 + weight($1) }
+            guard total > 0 else { return nil }
+            let free = height - nodeGap * CGFloat(max(active.count - 1, 0)) - minNode[members[0].column] * CGFloat(active.count)
+            return max(free, 0) / CGFloat(total)
+        }.min() ?? 0
+
+        for members in columns {
+            let column = members[0].column
+            let active = members.filter { weight($0) > 0 }
+            let used = active.reduce(CGFloat(0)) { $0 + minNode[column] + scale * CGFloat(weight($1)) }
+                + nodeGap * CGFloat(max(active.count - 1, 0))
+            var y = max(height - used, 0)
+            for node in members {
+                guard weight(node) > 0 else { nodes[node] = y...y; continue }
+                let h = minNode[column] + scale * CGFloat(weight(node))
+                nodes[node] = y...(y + h)
+                y += h + nodeGap
             }
-            // Links leave each source in the order their targets sit (top first) so ribbons never cross.
-            for node in Node.allCases {
-                guard let span = nodes[node] else { continue }
-                let outgoing = links.filter { $0.from == node }, incoming = links.filter { $0.to == node }
-                for (group, isSource) in [(outgoing, true), (incoming, false)] {
-                    let total = group.reduce(0) { $0 + $1.watts }
-                    var y = span.lowerBound
-                    for link in group {
-                        let h = total > 0 ? (span.upperBound - span.lowerBound) * CGFloat(link.watts / total) : 0
-                        if isSource { sourceEnds[link.id] = y...(y + h) } else { sinkEnds[link.id] = y...(y + h) }
-                        y += h
-                    }
+        }
+        // Each node's links stack top-to-bottom in the order their other ends sit, so ribbons never cross.
+        for node in PowerFlowView.Node.allCases {
+            guard let span = nodes[node] else { continue }
+            for isSource in [true, false] {
+                let group = links.filter { isSource ? $0.from == node : $0.to == node }
+                let total = group.reduce(0) { $0 + $1.watts }
+                var y = span.lowerBound
+                for link in group {
+                    let h = total > 0 ? (span.upperBound - span.lowerBound) * CGFloat(link.watts / total) : 0
+                    if isSource { sourceEnds[link.id] = y...(y + h) } else { sinkEnds[link.id] = y...(y + h) }
+                    y += h
                 }
             }
         }
-
-        func nodeSpan(_ node: Node) -> ClosedRange<CGFloat> { nodes[node] ?? 0...0 }
-        func linkSpan(_ id: Int, atSource: Bool) -> ClosedRange<CGFloat> { (atSource ? sourceEnds[id] : sinkEnds[id]) ?? 0...0 }
     }
+
+    func node(_ n: PowerFlowView.Node) -> ClosedRange<CGFloat> { nodes[n] ?? 0...0 }
+    func end(_ id: Int, source: Bool) -> ClosedRange<CGFloat> { (source ? sourceEnds[id] : sinkEnds[id]) ?? 0...0 }
 }
 
 /// Soft light bands drifting left to right through a ribbon, so you can see power moving.
@@ -166,7 +205,7 @@ private struct FlowStreaks: View {
             GeometryReader { p in
                 ForEach(0..<2, id: \.self) { i in
                     let x = ((phase + CGFloat(i) * 0.5).truncatingRemainder(dividingBy: 1)) * 1.4 - 0.3
-                    LinearGradient(colors: [.clear, .white.opacity(0.07), .clear], startPoint: .leading, endPoint: .trailing)
+                    LinearGradient(colors: [.clear, .white.opacity(0.08), .clear], startPoint: .leading, endPoint: .trailing)
                         .frame(width: p.size.width * 0.3)
                         .offset(x: x * p.size.width)
                 }

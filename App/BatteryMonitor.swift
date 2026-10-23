@@ -40,6 +40,9 @@ struct PowerFlow: Equatable, Sendable {
     var adapterToBattery: Double = 0
     var batteryToSystem: Double = 0
     var systemLoad: Double = 0
+    /// Per-consumer breakdown for the second stage of the flow; nil until a verified source exists.
+    var soc: Double?
+    var display: Double?
     var adapterIn: Double { adapterToSystem + adapterToBattery }
 }
 

@@ -11,6 +11,8 @@ struct BatteryBar: View {
     /// nil hides the handle (read-only bar, e.g. the dashboard).
     var limit: Binding<Int>? = nil
     var limitLocked = false
+    /// Sailing Mode's lower bound, drawn as a dashed tick like AlDente.
+    var sailingFloor: Int? = nil
 
     @State private var sweep: CGFloat = -0.6
     @State private var bounce: CGFloat = 1
@@ -22,6 +24,7 @@ struct BatteryBar: View {
             let fill = max(width * CGFloat(percent) / 100, height)
             ZStack(alignment: .leading) {
                 Capsule(style: .continuous).fill(Theme.track)
+                    .glassEffect(.regular, in: .capsule)
 
                 Capsule(style: .continuous)
                     .fill(Theme.color(for: state).gradient)
@@ -39,10 +42,28 @@ struct BatteryBar: View {
                     .frame(width: fill)
                     .scaleEffect(y: bounce, anchor: .center)
                     .overlay {
-                        StatusGlyph(state: state, size: height * 0.6)
+                        StatusGlyph(state: state, size: height * 0.5)
                             .foregroundStyle(.white)
                             .opacity(fill > height * 2.4 ? 1 : 0)
+                            .offset(x: -min(fill / 2 - height, fill * 0.18))
                     }
+
+                Text("\(percent)%")
+                    .font(.system(size: height * 0.5, weight: .semibold))
+                    .monospacedDigit()
+                    .contentTransition(.numericText(value: Double(percent)))
+                    .foregroundStyle(.white)
+                    .shadow(color: .black.opacity(0.25), radius: 1, y: 0.5)
+                    .frame(width: width)
+
+                if let sailingFloor, limit != nil {
+                    Path { p in
+                        let x = width * CGFloat(sailingFloor) / 100
+                        p.move(to: CGPoint(x: x, y: 3)); p.addLine(to: CGPoint(x: x, y: height - 3))
+                    }
+                    .stroke(.white.opacity(0.6), style: StrokeStyle(lineWidth: 1.5, lineCap: .round, dash: [2.5, 2.5]))
+                    .transition(.opacity)
+                }
 
                 if let limit {
                     let x = width * CGFloat(limit.wrappedValue) / 100
