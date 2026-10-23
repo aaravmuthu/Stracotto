@@ -76,7 +76,8 @@ struct PowerFlowView: View {
                         .offset(x: ribbonX[stage])
                     // AlDente's colour wash: energy turns blue as it reaches the Mac and fades out toward the consumers.
                     // While charging it flows (green/gold) instead of sitting still.
-                    StageGradient(stage: stage, palette: palette, flowing: state == .charging || state == .pluggedDraining)
+                    let totalWatts = stageLinks.reduce(0) { $0 + $1.watts }
+                    StageGradient(stage: stage, palette: palette, watts: totalWatts)
                         .clipShape(shape)
                         .frame(width: ribbonWidth, height: size.height)
                         .offset(x: ribbonX[stage])
@@ -137,6 +138,8 @@ struct PowerFlowView: View {
 
     /// Colours for the wash: where energy comes from, and what it becomes at the Mac.
     struct Palette: Equatable { let source: Color; let accent: Color }
+
+    private var link0IsCharging: Bool { state == .charging }
 
     private var palette: Palette {
         switch state {
@@ -289,7 +292,7 @@ private struct FlowStreaks: View {
     var color: Color = .white
 
     var body: some View {
-        TimelineView(.animation) { context in
+        TimelineView(.animation(minimumInterval: 1.0 / 60)) { context in
             let t = context.date.timeIntervalSinceReferenceDate
             let period = 3.2 / min(max(watts / 12, 0.6), 2.2)
             let phase = CGFloat((t / period).truncatingRemainder(dividingBy: 1))
@@ -393,45 +396,45 @@ struct EdgeVector: VectorArithmetic {
 
 /// The colour wash over one stage's fused slab. Stage 0 (into the Mac) runs from a faint source tone to the accent at the
 /// Mac; stage 1 (out of the Mac) starts in the accent and fades back to the slab grey toward the consumers.
-/// When `flowing`, the whole wash drifts left to right on a loop and a soft bright band rides along it.
+/// It always flows: the colour breathes and a soft bright band rides along, faster the more power is moving.
 private struct StageGradient: View {
     let stage: Int
     let palette: PowerFlowView.Palette
-    let flowing: Bool
+    let watts: Double
+
+    /// Seconds for one wave to cross the stage; more power moves faster.
+    private var period: Double { 3.6 / min(max(watts / 12, 0.6), 2.0) }
+
+    /// AlDente's static wash, as (colour, opacity, location).
+    private var base: [(Color, Double, Double)] {
+        let s = palette.source, a = palette.accent
+        return stage == 0
+            ? [(s, 0.10, 0), (s, 0.14, 0.25), (a, 0.22, 0.62), (a, 0.62, 1)]
+            : [(a, 0.66, 0), (a, 0.55, 0.38), (a, 0.16, 0.72), (a, 0.0, 1)]
+    }
 
     var body: some View {
-        if flowing {
-            TimelineView(.animation) { context in
-                wash(phase: CGFloat((context.date.timeIntervalSinceReferenceDate / 2.6).truncatingRemainder(dividingBy: 1)))
-            }
-        } else {
-            wash(phase: nil)
+        TimelineView(.animation(minimumInterval: 1.0 / 60)) { context in
+            let phase = (context.date.timeIntervalSinceReferenceDate / period).truncatingRemainder(dividingBy: 1)
+            LinearGradient(stops: stops(phase: phase), startPoint: .leading, endPoint: .trailing)
         }
     }
 
-    private func stops(shift: CGFloat) -> [Gradient.Stop] {
-        let s = palette.source, a = palette.accent
-        let base: [(Color, CGFloat)] = stage == 0
-            ? [(s.opacity(0.10), 0), (s.opacity(0.14), 0.25), (a.opacity(0.22), 0.62), (a.opacity(0.62), 1)]
-            : [(a.opacity(0.66), 0), (a.opacity(0.55), 0.38), (a.opacity(0.16), 0.72), (a.opacity(0.0), 1)]
-        // A flowing wash breathes its accent slightly with the phase so the colour feels alive, not just shifted.
-        let lift = 0.08 * sin(shift * 2 * .pi)
-        return base.map { .init(color: $0.0.opacity(1 + lift), location: $0.1) }
+    /// The same gradient, sampled finely, with a soft swell of its own colour travelling left to right.
+    private func stops(phase: Double) -> [Gradient.Stop] {
+        (0...24).map { i in
+            let x = Double(i) / 24
+            let (color, opacity) = sample(x)
+            let wave = 1 + 0.32 * sin(2 * .pi * (x * 1.5 - phase))
+            return .init(color: color.opacity(min(opacity * wave, 1)), location: x)
+        }
     }
 
-    private func wash(phase: CGFloat?) -> some View {
-        GeometryReader { g in
-            ZStack {
-                LinearGradient(stops: stops(shift: phase ?? 0), startPoint: .leading, endPoint: .trailing)
-                if let phase {
-                    // Bright band travelling with the energy.
-                    LinearGradient(colors: [.clear, palette.accent.mix(with: .white, by: 0.5).opacity(0.38), .clear],
-                                   startPoint: .leading, endPoint: .trailing)
-                        .frame(width: g.size.width * 0.45)
-                        .offset(x: (phase * 1.6 - 0.45) * g.size.width)
-                        .blendMode(.plusLighter)
-                }
-            }
-        }
+    private func sample(_ x: Double) -> (Color, Double) {
+        let b = base
+        guard let i = b.lastIndex(where: { $0.2 <= x }), i < b.count - 1 else { return (b.last!.0, b.last!.1) }
+        let (c0, o0, l0) = b[i], (c1, o1, l1) = b[i + 1]
+        let f = (x - l0) / max(l1 - l0, 0.0001)
+        return (c0.mix(with: c1, by: f), o0 + (o1 - o0) * f)
     }
 }

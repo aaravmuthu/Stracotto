@@ -133,7 +133,7 @@ struct BatteryBar: View {
 private struct ChargingGloss: View {
     var color: Color = .white
     var body: some View {
-        TimelineView(.animation) { context in
+        TimelineView(.animation(minimumInterval: 1.0 / 60)) { context in
             let t = context.date.timeIntervalSinceReferenceDate
             let phase = CGFloat((t / 2.4).truncatingRemainder(dividingBy: 1))
             GeometryReader { p in
@@ -150,7 +150,7 @@ private struct ChargingGloss: View {
 /// Diagonal stripes rolling right through the fill while topping up — "filling past the limit".
 private struct TopUpStripes: View {
     var body: some View {
-        TimelineView(.animation) { context in
+        TimelineView(.animation(minimumInterval: 1.0 / 60)) { context in
             let t = context.date.timeIntervalSinceReferenceDate
             Canvas { ctx, size in
                 let spacing: CGFloat = 14
@@ -175,7 +175,7 @@ private struct TopUpStripes: View {
 /// The unfilled part of the track gently breathing green, pointing at 100 %.
 private struct TopUpGhost: View {
     var body: some View {
-        TimelineView(.animation) { context in
+        TimelineView(.animation(minimumInterval: 1.0 / 60)) { context in
             let t = context.date.timeIntervalSinceReferenceDate
             let pulse = 0.5 + 0.5 * sin(t * 2 * .pi / 1.8)
             LinearGradient(colors: [Theme.charging.opacity(0.10 + 0.18 * pulse), Theme.charging.opacity(0.04)],
