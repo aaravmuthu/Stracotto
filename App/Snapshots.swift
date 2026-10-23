@@ -108,10 +108,12 @@ enum Snapshots {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
         let (charging, paused, draining, battery) = { let x = Dictionary(uniqueKeysWithValues: sampleStates()); return (x["charging"]!, x["paused"]!, x["draining"]!, x["battery"]!) }()
-        UserDefaults.standard.set(true, forKey: ChargePrefs.sailing)
-        UserDefaults.standard.set(5.0, forKey: ChargePrefs.sailingRange)
-        UserDefaults.standard.set(false, forKey: Prefs.showHardwarePercent)
-        UserDefaults.standard.set(false, forKey: AppearancePrefs.showPowerMode)
+        // Fixed display settings for renders, held in the volatile argument domain so the user's saved
+        // preferences are never touched.
+        UserDefaults.standard.setVolatileDomain([
+            ChargePrefs.sailing: true, ChargePrefs.sailingRange: 5.0, Prefs.showHardwarePercent: false,
+            AppearancePrefs.showPowerMode: false, AppearancePrefs.stats: "", AppearancePrefs.iconStyle: MenuBarStyle.native.rawValue,
+        ], forName: UserDefaults.argumentDomain)
         for (name, snap) in sampleStates() {
             let apps = name == "draining" ? [
                 EnergyMonitor.AppEnergy(id: "/Applications/Xcode.app", name: "Xcode", watts: 9.4),

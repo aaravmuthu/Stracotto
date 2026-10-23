@@ -379,7 +379,7 @@ private struct AppearancePage: View {
             .pickerStyle(.segmented)
             .onChange(of: mode) { _, m in AppearanceMode.apply(m) }
             ToggleRow(title: "Liquid Glass Surfaces", icon: "drop.halffull",
-                      help: "Real refractive glass that shows the desktop through. Off matches AlDente's solid slabs.", isOn: $liquidGlass)
+                      help: "Real refractive glass that shows the desktop through. Off uses solid dark slabs.", isOn: $liquidGlass)
             ToggleRow(title: "Reduce Transparency", icon: "square.on.square.dashed",
                       help: "Uses solid surfaces everywhere.", isOn: $reduceTransparency)
         }

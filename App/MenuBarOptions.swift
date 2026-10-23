@@ -8,7 +8,7 @@ enum MenuBarStyle: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .native: "iOS Native"
-        case .status: "AlDente Status"
+        case .status: "Live Status"
         case .percentage: "Percentage Only"
         }
     }
