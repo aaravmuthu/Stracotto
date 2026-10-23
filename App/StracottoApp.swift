@@ -2,6 +2,7 @@ import ServiceManagement
 import SwiftUI
 
 enum Prefs {
+    static let chargeLimit = "chargeLimit"
     static let showPowerFlow = "showPowerFlow"
     static let showSpecs = "showSpecs"
     static let showEnergyApps = "showEnergyApps"
@@ -38,7 +39,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var status: StatusController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        status = StatusController(battery: BatteryMonitor(), energy: EnergyMonitor())
+        if CommandLine.arguments.contains("--preview") { return }
+        status = StatusController(battery: BatteryMonitor(), energy: EnergyMonitor(), charge: ChargeController())
     }
 }
 
@@ -50,11 +52,16 @@ final class StatusController: NSObject, NSPopoverDelegate {
     private var settingsWindow: NSWindow?
     private let battery: BatteryMonitor
     private let energy: EnergyMonitor
+    private let charge: ChargeController
+    private let scheduler: Scheduler
 
-    init(battery: BatteryMonitor, energy: EnergyMonitor) {
+    init(battery: BatteryMonitor, energy: EnergyMonitor, charge: ChargeController) {
         self.battery = battery
         self.energy = energy
+        self.charge = charge
+        self.scheduler = Scheduler(charge: charge)
         super.init()
+        battery.onUpdate = { [weak charge] snapshot in charge?.batteryChanged(snapshot) }
 
         guard let button = statusItem.button else { return }
         let icon = PassthroughHostingView(rootView: MenuBarIcon()
@@ -72,11 +79,17 @@ final class StatusController: NSObject, NSPopoverDelegate {
         button.target = self
         button.action = #selector(togglePopover)
 
+        // The popover is resized by hand from the content's ideal height, inside an animation group, so the window
+        // grows in step with SwiftUI's transitions instead of snapping a frame later.
         let content = NSHostingController(rootView: PopoverView()
+            .fixedSize(horizontal: false, vertical: true)
+            .onGeometryChange(for: CGFloat.self, of: \.size.height) { [weak self] height in self?.resizePopover(to: height) }
+            .frame(maxHeight: .infinity, alignment: .top)
             .environment(battery)
             .environment(energy)
+            .environment(charge)
             .environment(\.showSettings, SettingsOpener { [weak self] in self?.showSettings() }))
-        content.sizingOptions = .preferredContentSize
+        content.sizingOptions = []
         popover.contentViewController = content
         popover.behavior = .transient
         popover.animates = true
@@ -96,12 +109,26 @@ final class StatusController: NSObject, NSPopoverDelegate {
 
     func popoverDidClose(_ notification: Notification) { statusItem.button?.highlight(false) }
 
+    private func resizePopover(to height: CGFloat) {
+        let size = NSSize(width: 380, height: ceil(height))
+        guard abs(popover.contentSize.height - size.height) > 0.5 else { return }
+        guard popover.isShown else { popover.contentSize = size; return }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.32
+            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.25, 0.1, 0.25, 1)
+            context.allowsImplicitAnimation = true
+            popover.contentSize = size
+        }
+    }
+
     private func showSettings() {
         popover.performClose(nil)
         if settingsWindow == nil {
             let window = NSWindow(contentViewController: NSHostingController(rootView: SettingsView()
                 .environment(battery)
-                .environment(energy)))
+                .environment(energy)
+                .environment(charge)
+                .environment(scheduler)))
             window.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
             window.titlebarAppearsTransparent = true
             window.title = "Stracotto"

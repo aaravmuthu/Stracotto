@@ -3,6 +3,7 @@ import SwiftUI
 struct PopoverView: View {
     @Environment(BatteryMonitor.self) private var monitor
     @Environment(EnergyMonitor.self) private var energy
+    @Environment(ChargeController.self) private var charge
     @Environment(\.showSettings) private var showSettings
     @AppStorage(Prefs.showPowerFlow) private var showPowerFlow = true
     @AppStorage(Prefs.showSpecs) private var showSpecs = true
@@ -10,33 +11,54 @@ struct PopoverView: View {
 
     var body: some View {
         let s = monitor.snapshot
+        @Bindable var charge = charge
+        GlassEffectContainer(spacing: 10) {
         VStack(spacing: 18) {
             HStack(spacing: 8) {
                 Chip {
                     HStack(spacing: 4) {
-                        Text("Battery:").fontWeight(.bold)
-                        Text("\(s.percent)%").monospacedDigit().contentTransition(.numericText(value: Double(s.percent)))
+                        Text("Limit:").fontWeight(.bold)
+                        Text("\(charge.target)%").monospacedDigit().contentTransition(.numericText(value: Double(charge.target)))
                     }
                 }
+                .help(charge.backendStatus == .ready ? "Battery stops charging at this level" : "Charge control isn't active yet")
                 Spacer()
-                if let minutes = s.minutesRemaining {
-                    Chip {
-                        Text(Self.duration(minutes) + (s.state == .charging ? " to full" : " left"))
-                            .monospacedDigit()
-                            .contentTransition(.numericText(value: Double(minutes)))
+                Button { charge.toggleTopUp() } label: {
+                    HStack(spacing: 6) {
+                        Text(charge.isToppingUp ? "Topping Up" : "Top Up")
+                            .contentTransition(.interpolate)
+                        Image(systemName: charge.isToppingUp ? "checkmark.circle.fill" : "plus.circle")
+                            .font(.system(size: 19, weight: .regular))
+                            .contentTransition(.symbolEffect(.replace.magic(fallback: .downUp)))
                     }
-                    .transition(.blurReplace)
-                }
-                Button { showSettings() } label: {
-                    Image(systemName: "gearshape").font(.system(size: 17)).frame(width: 30, height: 30)
+                    .padding(.horizontal, 13)
+                    .frame(height: 32)
                 }
                 .buttonStyle(.plain)
-                .background(Theme.chip, in: .rect(cornerRadius: Theme.chipRadius))
+                .glassCard(radius: Theme.chipRadius, tint: charge.isToppingUp ? Theme.charging.opacity(0.55) : nil, interactive: true)
+                .help("Charge to 100% once, until you unplug")
+                Button { showSettings() } label: {
+                    Image(systemName: "gearshape").font(.system(size: 18)).frame(width: 32, height: 32)
+                }
+                .buttonStyle(.plain)
+                .glassCard(radius: Theme.chipRadius, interactive: true)
                 .help("Settings")
             }
             .font(.system(size: 14))
 
-            BatteryBar(percent: s.percent, state: s.state, plugEvents: monitor.plugEvents)
+            BatteryBar(percent: s.percent, state: s.state, plugEvents: monitor.plugEvents,
+                       limit: $charge.limit, limitLocked: charge.isToppingUp)
+
+            if let minutes = s.minutesRemaining {
+                Text(Self.duration(minutes) + (s.state == .charging ? " until full" : " remaining"))
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .contentTransition(.numericText(value: Double(minutes)))
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, -8)
+                    .transition(.blurReplace)
+            }
 
             if showPowerFlow {
                 PowerFlowView(flow: s.flow, state: s.state, adapterWatts: s.adapterWatts, plugEvents: monitor.plugEvents)
@@ -52,8 +74,10 @@ struct PopoverView: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
             }
         }
+        }
         .padding(16)
         .frame(width: 380)
+        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: charge.isToppingUp)
         .animation(Theme.spring, value: s.minutesRemaining == nil)
         .animation(Theme.spring, value: showPowerFlow)
         .animation(Theme.spring, value: showSpecs)
@@ -97,7 +121,7 @@ struct EnergyAppsList: View {
                     }
                     .padding(.horizontal, 10)
                     .frame(height: 34)
-                    .background(Theme.node, in: .rect(cornerRadius: 10))
+                    .glassCard(radius: 13)
                     .transition(.asymmetric(insertion: .scale(scale: 0.9).combined(with: .opacity), removal: .opacity))
                 }
             }
@@ -147,7 +171,7 @@ struct SpecCell: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, minHeight: 62)
-        .background(Theme.node, in: .rect(cornerRadius: Theme.chipRadius))
+        .glassCard(radius: Theme.chipRadius)
         .animation(Theme.spring, value: value)
     }
 }

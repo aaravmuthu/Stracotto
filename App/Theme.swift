@@ -12,8 +12,9 @@ enum Theme {
     static let node = Color.primary.opacity(0.08)
     static let ribbon = Color.primary.opacity(0.06)
 
-    static let chipRadius: CGFloat = 14
-    static let nodeRadius: CGFloat = 18
+    static let chipRadius: CGFloat = 16
+    static let nodeRadius: CGFloat = 20
+    static let ribbonRadius: CGFloat = 12
 
     /// One spring for everything so the bar, ribbons and numbers settle together.
     static let spring = Animation.spring(response: 0.55, dampingFraction: 0.82)
@@ -73,8 +74,15 @@ struct Chip<Content: View>: View {
     @ViewBuilder var content: Content
     var body: some View {
         content
-            .padding(.horizontal, 12)
-            .frame(height: 30)
-            .background(Theme.chip, in: .rect(cornerRadius: Theme.chipRadius))
+            .padding(.horizontal, 13)
+            .frame(height: 32)
+            .glassCard(radius: Theme.chipRadius)
+    }
+}
+
+extension View {
+    /// Frosted Liquid Glass with Apple's continuous corners.
+    func glassCard(radius: CGFloat, tint: Color? = nil, interactive: Bool = false) -> some View {
+        glassEffect(Glass.regular.tint(tint).interactive(interactive), in: .rect(cornerRadius: radius, style: .continuous))
     }
 }

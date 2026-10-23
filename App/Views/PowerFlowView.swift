@@ -65,8 +65,7 @@ struct PowerFlowView: View {
                     let span = layout.nodeSpan(node)
                     nodeView(node, height: span.upperBound - span.lowerBound)
                         .frame(width: nodeWidth, height: max(span.upperBound - span.lowerBound, 0))
-                        .background(Theme.node, in: .rect(cornerRadius: Theme.nodeRadius))
-                        .clipShape(.rect(cornerRadius: Theme.nodeRadius))
+                        .glassCard(radius: Theme.nodeRadius)
                         .opacity(span.upperBound - span.lowerBound > 1 ? 1 : 0)
                         .offset(x: isLeft(node) ? 0 : proxy.size.width - nodeWidth, y: span.lowerBound)
                 }
@@ -188,12 +187,19 @@ struct RibbonShape: Shape {
     }
 
     func path(in rect: CGRect) -> Path {
-        let midX = rect.midX
+        // Corners round off where the ribbon meets a node; the radius shrinks for thin ribbons so ends stay pill-shaped.
+        let r0 = min(Theme.ribbonRadius, max(bottom0 - top0, 0) / 2)
+        let r1 = min(Theme.ribbonRadius, max(bottom1 - top1, 0) / 2)
+        let (x0, x1, midX) = (rect.minX, rect.maxX, rect.midX)
         var p = Path()
-        p.move(to: CGPoint(x: rect.minX, y: top0))
-        p.addCurve(to: CGPoint(x: rect.maxX, y: top1), control1: CGPoint(x: midX, y: top0), control2: CGPoint(x: midX, y: top1))
-        p.addLine(to: CGPoint(x: rect.maxX, y: bottom1))
-        p.addCurve(to: CGPoint(x: rect.minX, y: bottom0), control1: CGPoint(x: midX, y: bottom1), control2: CGPoint(x: midX, y: bottom0))
+        p.move(to: CGPoint(x: x0, y: top0 + r0))
+        p.addQuadCurve(to: CGPoint(x: x0 + r0, y: top0), control: CGPoint(x: x0, y: top0))
+        p.addCurve(to: CGPoint(x: x1 - r1, y: top1), control1: CGPoint(x: midX, y: top0), control2: CGPoint(x: midX, y: top1))
+        p.addQuadCurve(to: CGPoint(x: x1, y: top1 + r1), control: CGPoint(x: x1, y: top1))
+        p.addLine(to: CGPoint(x: x1, y: bottom1 - r1))
+        p.addQuadCurve(to: CGPoint(x: x1 - r1, y: bottom1), control: CGPoint(x: x1, y: bottom1))
+        p.addCurve(to: CGPoint(x: x0 + r0, y: bottom0), control1: CGPoint(x: midX, y: bottom1), control2: CGPoint(x: midX, y: bottom0))
+        p.addQuadCurve(to: CGPoint(x: x0, y: bottom0 - r0), control: CGPoint(x: x0, y: bottom0))
         p.closeSubpath()
         return p
     }

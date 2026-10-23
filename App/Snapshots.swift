@@ -2,18 +2,7 @@ import SwiftUI
 
 /// `Stracotto --dump` prints the live reading. `Stracotto --snapshot <dir>` renders the popover in each power state to PNG and exits. Used to compare against reference shots.
 enum Snapshots {
-    @MainActor static func runIfRequested() {
-        let args = CommandLine.arguments
-        if args.contains("--dump") {
-            let monitor = BatteryMonitor()
-            RunLoop.main.run(until: Date().addingTimeInterval(3)) // let the system_profiler health read land
-            dump(monitor.snapshot)
-            exit(0)
-        }
-        guard let i = args.firstIndex(of: "--snapshot"), i + 1 < args.count else { return }
-        let dir = URL(fileURLWithPath: args[i + 1])
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-
+    static func sampleStates() -> [(String, BatterySnapshot)] {
         var base = BatterySnapshot()
         base.cycleCount = 349; base.designCycleCount = 1000; base.health = 89; base.condition = "Good"
         base.designCapacity = 4563; base.fullChargeCapacity = 3785; base.remainingCapacity = 3028
@@ -32,6 +21,53 @@ enum Snapshots {
         battery.percent = 27; battery.state = .onBattery; battery.minutesRemaining = 130; battery.adapterWatts = nil; battery.amperage = -1.48
         battery.flow = PowerFlow(adapterToSystem: 0, adapterToBattery: 0, batteryToSystem: 18.63, systemLoad: 18.63)
 
+        return [("charging", charging), ("paused", paused), ("draining", draining), ("battery", battery)]
+    }
+
+    @MainActor private static var previewWindow: NSWindow?
+
+    /// `Stracotto --preview <charging|paused|draining|battery>` opens the popover content in a real window with sample
+    /// data. Liquid Glass only renders in a live window, so this is how the glass gets checked.
+    @MainActor static func preview(_ name: String) {
+        DispatchQueue.main.async {
+            let samples = sampleStates()
+            guard let snap = samples.first(where: { $0.0 == name })?.1 else { return }
+            let view = PopoverView()
+                .padding(.vertical, 6)
+                .environment(BatteryMonitor(fixed: snap))
+                .environment(EnergyMonitor(fixed: name == "draining" ? sampleApps : []))
+                .environment(ChargeController())
+            let window = NSWindow(contentViewController: NSHostingController(rootView: view))
+            window.title = "Stracotto Preview – \(name)"
+            window.isReleasedWhenClosed = false
+            window.center()
+            NSApp.setActivationPolicy(.regular)
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate()
+            previewWindow = window
+        }
+    }
+
+    static let sampleApps = [
+        EnergyMonitor.AppEnergy(id: "/Applications/Xcode.app", name: "Xcode", watts: 9.4),
+        EnergyMonitor.AppEnergy(id: "/Applications/Google Chrome.app", name: "Google Chrome", watts: 3.1),
+        EnergyMonitor.AppEnergy(id: "/System/Applications/Music.app", name: "Music", watts: 1.2),
+    ]
+
+    @MainActor static func runIfRequested() {
+        let args = CommandLine.arguments
+        if let i = args.firstIndex(of: "--preview"), i + 1 < args.count { preview(args[i + 1]); return }
+        if args.contains("--dump") {
+            let monitor = BatteryMonitor()
+            RunLoop.main.run(until: Date().addingTimeInterval(3)) // let the system_profiler health read land
+            dump(monitor.snapshot)
+            exit(0)
+        }
+        guard let i = args.firstIndex(of: "--snapshot"), i + 1 < args.count else { return }
+        let dir = URL(fileURLWithPath: args[i + 1])
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+
+        let (charging, paused, draining, battery) = { let x = sampleStates(); return (x[0].1, x[1].1, x[2].1, x[3].1) }()
         for (name, snap) in [("charging", charging), ("paused", paused), ("draining", draining), ("battery", battery)] {
             let apps = name == "draining" ? [
                 EnergyMonitor.AppEnergy(id: "/Applications/Xcode.app", name: "Xcode", watts: 9.4),
@@ -41,6 +77,8 @@ enum Snapshots {
             let view = PopoverView()
                 .environment(BatteryMonitor(fixed: snap))
                 .environment(EnergyMonitor(fixed: apps))
+                .environment(ChargeController())
+                .environment(\.colorScheme, .dark)
                 .background(Color(white: 0.24))
                 .environment(\.colorScheme, .dark)
             let renderer = ImageRenderer(content: view)
