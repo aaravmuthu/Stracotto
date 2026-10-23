@@ -79,6 +79,10 @@ final class Scheduler {
 
     func add(_ task: Task) { tasks.append(task); tasks.sort { $0.date < $1.date } }
     func remove(_ task: Task) { tasks.removeAll { $0.id == task.id } }
+    func clearHistory() {
+        history = []
+        UserDefaults.standard.removeObject(forKey: "schedule.history")
+    }
 
     private func tick() {
         let now = Date()

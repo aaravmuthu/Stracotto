@@ -19,6 +19,7 @@ struct BatteryBar: View {
     @State private var sweep: CGFloat = -0.6
     @State private var bounce: CGFloat = 1
     @State private var dragging = false
+    @State private var glow: CGFloat = 0
 
     var body: some View {
         GeometryReader { proxy in
@@ -32,9 +33,9 @@ struct BatteryBar: View {
                     .liquidGlass(in: .capsule)
 
                 ZStack {
-                    if state == .charging { ChargingGloss() }
+                    if state == .charging { ChargingGloss(color: Theme.charging) }
                     GeometryReader { p in
-                        LinearGradient(colors: [.clear, .white.opacity(0.5), .clear], startPoint: .leading, endPoint: .trailing)
+                        LinearGradient(colors: [.clear, Theme.charging.mix(with: .white, by: 0.45).opacity(0.85), .clear], startPoint: .leading, endPoint: .trailing)
                             .frame(width: p.size.width * 0.45)
                             .offset(x: sweep * p.size.width)
                     }
@@ -46,6 +47,9 @@ struct BatteryBar: View {
                 .clipShape(.capsule(style: .continuous))
                 .frame(width: fill, height: height)
                 .liquidGlass(tint: Theme.color(for: state).opacity(0.75), in: .capsule)
+                // Coloured halo that blooms on plug-in and fades out.
+                .shadow(color: Theme.charging.opacity(0.9 * glow), radius: 14 * glow)
+                .shadow(color: Theme.bolt.opacity(0.5 * glow), radius: 4 * glow)
                 .scaleEffect(y: bounce)
 
                 Text("\(percent)%")
@@ -107,6 +111,9 @@ struct BatteryBar: View {
     }
 
     private func playPlugIn() {
+        glow = 0
+        withAnimation(.smooth(duration: 0.3)) { glow = 1 }
+        withAnimation(.smooth(duration: 1.2).delay(0.5)) { glow = 0 }
         sweep = -0.6
         withAnimation(.smooth(duration: 0.9)) { sweep = 1.3 }
         withAnimation(.spring(response: 0.24, dampingFraction: 0.55)) { bounce = 1.12 }
@@ -117,12 +124,13 @@ struct BatteryBar: View {
 /// A slow, continuous highlight drifting left to right while the battery fills. Driven by the display clock, so it's
 /// perfectly smooth and costs nothing once the popover closes.
 private struct ChargingGloss: View {
+    var color: Color = .white
     var body: some View {
         TimelineView(.animation) { context in
             let t = context.date.timeIntervalSinceReferenceDate
             let phase = CGFloat((t / 2.4).truncatingRemainder(dividingBy: 1))
             GeometryReader { p in
-                LinearGradient(colors: [.clear, .white.opacity(0.2), .clear], startPoint: .leading, endPoint: .trailing)
+                LinearGradient(colors: [.clear, color.mix(with: .white, by: 0.6).opacity(0.45), .clear], startPoint: .leading, endPoint: .trailing)
                     .frame(width: p.size.width * 0.35)
                     .offset(x: (phase * 1.7 - 0.35) * p.size.width)
             }

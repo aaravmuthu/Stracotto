@@ -60,7 +60,7 @@ struct PowerFlowView: View {
                     let ribbon = RibbonShape(top0: a.lowerBound, bottom0: a.upperBound, top1: b.lowerBound, bottom1: b.upperBound)
                     Color.clear
                         .overlay {
-                            FlowStreaks(watts: link.watts).opacity(link.watts >= 0.01 ? 1 : 0).clipShape(ribbon)
+                            FlowStreaks(watts: link.watts, color: streakColor(for: link)).opacity(link.watts >= 0.01 ? 1 : 0).clipShape(ribbon)
                         }
                         .liquidGlass(tint: ribbonTint(for: link), in: ribbon)
                         .opacity(link.watts >= 0.01 ? 1 : 0)
@@ -104,6 +104,19 @@ struct PowerFlowView: View {
     static func watts(_ w: Double) -> String {
         guard w >= 0.01 else { return "" }
         return w.formatted(.number.precision(.fractionLength(w >= 10 ? 1 : 2))) + " W"
+    }
+
+    /// Each flow glows in the colour of what it carries: charger power yellow, charging green, battery help blue,
+    /// SoC purple, display cyan; the rest stays white.
+    private func streakColor(for link: Link) -> Color {
+        switch (link.from, link.to) {
+        case (_, .batteryIn): Theme.charging
+        case (.adapter, _): Theme.bolt
+        case (.batteryOut, _): state == .pluggedDraining ? Theme.paused : .white
+        case (_, .soc): Theme.soc
+        case (_, .display): Theme.display
+        default: .white
+        }
     }
 
     private func ribbonTint(for link: Link) -> Color? {
@@ -199,6 +212,7 @@ private struct SankeyLayout {
 /// Speed follows watts, capped so a 90 W charger doesn't strobe.
 private struct FlowStreaks: View {
     let watts: Double
+    var color: Color = .white
 
     var body: some View {
         TimelineView(.animation) { context in
@@ -208,7 +222,7 @@ private struct FlowStreaks: View {
             GeometryReader { p in
                 ForEach(0..<2, id: \.self) { i in
                     let x = ((phase + CGFloat(i) * 0.5).truncatingRemainder(dividingBy: 1)) * 1.4 - 0.3
-                    LinearGradient(colors: [.clear, .white.opacity(0.08), .clear], startPoint: .leading, endPoint: .trailing)
+                    LinearGradient(colors: [.clear, color.opacity(color == .white ? 0.09 : 0.32), .clear], startPoint: .leading, endPoint: .trailing)
                         .frame(width: p.size.width * 0.3)
                         .offset(x: x * p.size.width)
                 }

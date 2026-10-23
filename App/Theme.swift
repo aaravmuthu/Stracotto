@@ -9,6 +9,8 @@ enum Theme {
     static let paused = Color(red: 0.25, green: 0.53, blue: 0.91)
     static let draining = Color(red: 0.84, green: 0.57, blue: 0.24)
     static let bolt = Color(red: 0.98, green: 0.80, blue: 0.27)
+    static let soc = Color(red: 0.69, green: 0.45, blue: 0.98)
+    static let display = Color(red: 0.35, green: 0.78, blue: 0.98)
     /// Current AlDente fills a discharging battery in neutral glass-gray, not orange.
     static let discharging = Color(white: 0.62)
 
@@ -92,16 +94,27 @@ extension View {
         liquidGlass(tint: tint, interactive: interactive, in: .rect(cornerRadius: radius, style: .continuous))
     }
 
-    /// Every glass surface goes through here. Offscreen snapshots can't render glass, so they get a flat stand-in
+    /// Every glass surface goes through here, so Reduce Transparency and offscreen snapshots get a solid stand-in
     /// with the same shape, rim and tint.
-    @ViewBuilder func liquidGlass<S: Shape>(tint: Color? = nil, interactive: Bool = false, in shape: S) -> some View {
-        if Theme.flatGlass {
-            background {
+    func liquidGlass<S: Shape>(tint: Color? = nil, interactive: Bool = false, in shape: S) -> some View {
+        modifier(LiquidGlass(shape: shape, tint: tint, interactive: interactive))
+    }
+}
+
+private struct LiquidGlass<S: Shape>: ViewModifier {
+    let shape: S
+    let tint: Color?
+    let interactive: Bool
+    @AppStorage(AppearancePrefs.reduceTransparency) private var reduceTransparency = false
+
+    func body(content: Content) -> some View {
+        if Theme.flatGlass || reduceTransparency {
+            content.background {
                 shape.fill(Color(white: 0.30).mix(with: tint ?? .clear, by: tint == nil ? 0 : 0.6))
                     .overlay { shape.stroke(.white.opacity(0.22), lineWidth: 0.8) }
             }
         } else {
-            glassEffect(Glass.regular.tint(tint).interactive(interactive), in: shape)
+            content.glassEffect(Glass.regular.tint(tint).interactive(interactive), in: shape)
         }
     }
 }

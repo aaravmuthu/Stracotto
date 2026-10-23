@@ -6,26 +6,71 @@ struct MenuBarIcon: View {
     @Environment(BatteryMonitor.self) private var battery
     @Environment(EnergyMonitor.self) private var energy
     @AppStorage(Prefs.menuBarEnergyAlert) private var showEnergyAlert = true
+    @AppStorage(AppearancePrefs.iconStyle) private var iconStyle = MenuBarStyle.native.rawValue
+    @AppStorage(AppearancePrefs.stats) private var statsRaw = ""
 
-    static func width(hot: Bool) -> CGFloat { AppleBattery.size.width + 4 + (hot ? 20 : 0) }
+    /// Width is a pure function of the configuration, never of animated content, so the status item never
+    /// re-lays out mid-animation.
+    static func width(style: MenuBarStyle, stats: Int, hot: Bool) -> CGFloat {
+        style.width + 4 + CGFloat(stats) * (MenuBarStat.width + 4) + (hot ? 20 : 0)
+    }
 
     var body: some View {
         let s = battery.snapshot
         let hot = showEnergyAlert && energy.isHot
+        let style = MenuBarStyle(rawValue: iconStyle) ?? .native
+        let stats = MenuBarStat.parse(statsRaw)
         HStack(spacing: 4) {
             if hot {
                 Image(systemName: "flame.fill")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Theme.draining)
+                    .foregroundStyle(LinearGradient(colors: [Theme.bolt, Theme.draining, .red], startPoint: .top, endPoint: .bottom))
                     .symbolEffect(.breathe.pulse.byLayer, options: .repeat(.continuous))
                     .frame(width: 16)
                     .transition(.scale(scale: 0.3).combined(with: .opacity))
                     .help("\(energy.heavyApps.first?.name ?? "An app") is using a lot of energy")
             }
-            AppleBattery(percent: s.percent, state: s.state, plugEvents: battery.plugEvents)
+            ForEach(stats) { stat in
+                Text(stat.value(s))
+                    .font(.system(size: 11, weight: .medium))
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+                    .frame(width: MenuBarStat.width)
+            }
+            MenuBarGlyph(style: style, percent: s.percent, state: s.state, plugEvents: battery.plugEvents)
         }
-        .frame(width: Self.width(hot: hot), height: 22)
+        .frame(width: Self.width(style: style, stats: stats.count, hot: hot), height: 22)
         .animation(.spring(response: 0.42, dampingFraction: 0.78), value: hot)
+        .animation(.smooth(duration: 0.4), value: s.percent)
+    }
+}
+
+/// The main icon in whichever style the user picked.
+struct MenuBarGlyph: View {
+    let style: MenuBarStyle
+    let percent: Int
+    let state: PowerState
+    let plugEvents: Int
+
+    var body: some View {
+        switch style {
+        case .native:
+            AppleBattery(percent: percent, state: state, plugEvents: plugEvents)
+        case .status:
+            HStack(spacing: 3) {
+                Text("\(percent)%").font(.system(size: 12.5, weight: .medium)).monospacedDigit()
+                    .contentTransition(.numericText(value: Double(percent)))
+                StatusGlyph(state: state, size: 12)
+                    .foregroundStyle(state == .charging ? Theme.charging : .primary)
+                    .symbolEffect(.bounce.up, value: plugEvents)
+            }
+            .frame(width: style.width)
+        case .percentage:
+            Text("\(percent)%").font(.system(size: 13, weight: .medium)).monospacedDigit()
+                .contentTransition(.numericText(value: Double(percent)))
+                .foregroundStyle(state == .charging ? Theme.charging : .primary)
+                .frame(width: style.width)
+        }
     }
 }
 
@@ -59,7 +104,7 @@ struct AppleBattery: View {
                         Rectangle()
                             .fill(fillColor)
                             .frame(width: proxy.size.width * level)
-                        LinearGradient(colors: [.clear, .white.opacity(0.95), .clear], startPoint: .leading, endPoint: .trailing)
+                        LinearGradient(colors: [.clear, Theme.bolt.mix(with: .white, by: 0.4), .clear], startPoint: .leading, endPoint: .trailing)
                             .frame(width: proxy.size.width * 0.55)
                             .offset(x: sweep * proxy.size.width)
                             .blendMode(.plusLighter)

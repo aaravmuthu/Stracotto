@@ -8,8 +8,7 @@ struct PopoverView: View {
     @AppStorage(Prefs.showPowerFlow) private var showPowerFlow = true
     @AppStorage(Prefs.showSpecs) private var showSpecs = true
     @AppStorage(Prefs.showEnergyApps) private var showEnergyApps = true
-    @AppStorage(ChargePrefs.sailing) private var sailing = false
-    @AppStorage(ChargePrefs.sailingRange) private var sailingRange = 5.0
+    @AppStorage(AppearancePrefs.showPowerMode) private var showPowerMode = true
 
     var body: some View {
         let s = monitor.snapshot
@@ -17,13 +16,29 @@ struct PopoverView: View {
         GlassEffectContainer(spacing: 2) {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
-                Chip {
+                // AlDente's Limit chip; on macOS 27 the hardware limit only takes 5% steps from 80, so it's a menu.
+                Menu {
+                    Picker("Charge Limit", selection: $charge.limit) {
+                        ForEach(charge.allowedLimits.reversed(), id: \.self) { value in
+                            Text(value == 100 ? "100% (Off)" : "\(value)%").tag(value)
+                        }
+                    }
+                    .pickerStyle(.inline)
+                } label: {
                     HStack(spacing: 4) {
                         Text("Limit:").fontWeight(.bold)
                         Text("\(charge.target)%").monospacedDigit().contentTransition(.numericText(value: Double(charge.target)))
                     }
+                    .padding(.horizontal, 14)
+                    .frame(height: 30)
+                    .contentShape(.capsule)
                 }
-                .help(charge.backendStatus == .ready ? "Battery stops charging at this level" : "Charge control isn't active yet")
+                .menuStyle(.button)
+                .buttonStyle(.plain)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .liquidGlass(tint: charge.isToppingUp ? Theme.charging.opacity(0.4) : nil, interactive: true, in: .capsule)
+                .help("Battery stops charging at this level")
                 Spacer()
                 Button { charge.toggleTopUp() } label: {
                     HStack(spacing: 6) {
@@ -50,13 +65,16 @@ struct PopoverView: View {
             .font(.system(size: 14))
             .padding(.bottom, 8)
 
-            BatteryBar(percent: s.percent, state: s.state, plugEvents: monitor.plugEvents,
-                       limit: $charge.limit, limitLocked: charge.isToppingUp, allowedLimits: charge.allowedLimits,
-                       sailingFloor: sailing ? max(charge.limit - Int(sailingRange), 20) : nil)
+            BatteryBar(percent: s.percent, state: s.state, plugEvents: monitor.plugEvents)
 
             if showPowerFlow {
                 PowerFlowView(flow: s.flow, state: s.state, adapterWatts: s.adapterWatts, plugEvents: monitor.plugEvents, height: 181)
                     .padding(.top, 20)
+                    .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
+            }
+            if showPowerMode {
+                PowerModeWidget(lowPower: s.lowPowerMode)
+                    .padding(.top, 18)
                     .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
             }
             if showEnergyApps {
@@ -82,6 +100,36 @@ struct PopoverView: View {
     }
 
     static func duration(_ minutes: Int) -> String { "\(minutes / 60):" + String(format: "%02d", minutes % 60) }
+}
+
+/// AlDente's power-mode widget: shows Low Power Mode and jumps to the Battery settings to change it.
+struct PowerModeWidget: View {
+    let lowPower: Bool
+
+    var body: some View {
+        Button {
+            NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Battery-Settings.extension")!)
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: lowPower ? "leaf.fill" : "bolt.fill")
+                    .font(.system(size: 15))
+                    .foregroundStyle(lowPower ? Theme.bolt : Theme.charging)
+                    .contentTransition(.symbolEffect(.replace))
+                Text("Power Mode").font(.system(size: 13.5))
+                Spacer()
+                Text(lowPower ? "Low Power" : "Automatic")
+                    .font(.system(size: 13.5, weight: .semibold))
+                    .contentTransition(.interpolate)
+                Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold)).foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 16)
+            .frame(height: 45)
+            .contentShape(.capsule)
+        }
+        .buttonStyle(.plain)
+        .liquidGlass(tint: lowPower ? Theme.bolt.opacity(0.25) : nil, interactive: true, in: .capsule)
+        .animation(.smooth(duration: 0.4), value: lowPower)
+    }
 }
 
 /// Like the battery menu's "Using Significant Energy", with live watts. Rows slide and re-sort as load shifts.
@@ -126,6 +174,13 @@ struct EnergyAppsList: View {
                             .monospacedDigit()
                             .contentTransition(.numericText(value: app.watts))
                             .frame(width: 46, alignment: .trailing)
+                        if app.isApp {
+                            Button { app.quit() } label: {
+                                Image(systemName: "xmark.circle.fill").font(.system(size: 15)).foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Quit \(app.name)")
+                        }
                     }
                     .padding(.horizontal, 10)
                     .frame(height: 34)

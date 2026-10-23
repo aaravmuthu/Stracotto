@@ -77,7 +77,9 @@ final class StatusController: NSObject, NSPopoverDelegate {
             icon.centerYAnchor.constraint(equalTo: button.centerYAnchor),
         ])
         button.target = self
-        button.action = #selector(togglePopover)
+        button.action = #selector(statusItemClicked)
+        button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        AppearanceMode.apply(UserDefaults.standard.string(forKey: AppearancePrefs.mode) ?? "system")
 
         // The popover is resized by hand from the content's ideal height, inside an animation group, so the window
         // grows in step with SwiftUI's transitions instead of snapping a frame later.
@@ -96,7 +98,27 @@ final class StatusController: NSObject, NSPopoverDelegate {
         popover.delegate = self
     }
 
-    @objc private func togglePopover() {
+    @objc private func statusItemClicked() {
+        guard NSApp.currentEvent?.type == .rightMouseUp else { return togglePopover() }
+        switch RightClickAction(rawValue: UserDefaults.standard.string(forKey: AppearancePrefs.rightClick) ?? "") ?? .dashboard {
+        case .dashboard: showSettings()
+        case .topUp: charge.toggleTopUp()
+        case .menu:
+            let menu = NSMenu()
+            menu.addItem(withTitle: "Open Dashboard", action: #selector(openDashboardFromMenu), keyEquivalent: "").target = self
+            menu.addItem(withTitle: charge.isToppingUp ? "Stop Top Up" : "Top Up", action: #selector(toggleTopUpFromMenu), keyEquivalent: "").target = self
+            menu.addItem(.separator())
+            menu.addItem(withTitle: "Quit Stracotto", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+            statusItem.menu = menu
+            statusItem.button?.performClick(nil)
+            statusItem.menu = nil
+        }
+    }
+
+    @objc private func openDashboardFromMenu() { showSettings() }
+    @objc private func toggleTopUpFromMenu() { charge.toggleTopUp() }
+
+    private func togglePopover() {
         guard let button = statusItem.button else { return }
         if popover.isShown {
             popover.performClose(nil)

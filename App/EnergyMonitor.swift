@@ -11,6 +11,14 @@ final class EnergyMonitor {
         let name: String
         var watts: Double
         @MainActor var icon: NSImage { EnergyMonitor.icon(for: id) }
+        var isApp: Bool { id.hasSuffix(".app") }
+
+        /// Asks the app to quit normally (it can still save or refuse), like AlDente's Quit button.
+        @MainActor func quit() {
+            NSWorkspace.shared.runningApplications
+                .filter { $0.bundleURL?.path == id }
+                .forEach { $0.terminate() }
+        }
     }
 
     private static var icons: [String: NSImage] = [:]
@@ -83,6 +91,8 @@ final class EnergyMonitor {
         smoothed = next
         heavyApps = next
             .filter { $0.value.watts >= Self.significant && $0.key != Bundle.main.bundlePath }
+            // Bare daemons only show when the user asks for background processes, like AlDente 1.39.
+            .filter { UserDefaults.standard.bool(forKey: AppearancePrefs.showBackgroundProcesses) || $0.key.hasSuffix(".app") }
             .map { AppEnergy(id: $0.key, name: $0.value.name, watts: $0.value.watts) }
             .sorted { $0.watts > $1.watts }
             .prefix(5)
