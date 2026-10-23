@@ -9,14 +9,16 @@ enum Theme {
     static let paused = Color(red: 0.25, green: 0.53, blue: 0.91)
     static let draining = Color(red: 0.84, green: 0.57, blue: 0.24)
     static let bolt = Color(red: 0.98, green: 0.80, blue: 0.27)
+    /// AlDente's text is a soft white, not pure white.
+    static let text = Color(.sRGB, red: 225 / 255, green: 225 / 255, blue: 225 / 255)
     static let soc = Color(red: 0.69, green: 0.45, blue: 0.98)
     static let display = Color(red: 0.35, green: 0.78, blue: 0.98)
     /// Current AlDente fills a discharging battery in neutral glass-gray, not orange.
     static let discharging = Color(white: 0.62)
 
     /// Slab and backdrop greys sampled from AlDente's popover.
-    static let slab = Color(red: 0.235, green: 0.235, blue: 0.24)
-    static let backdrop = Color(red: 0.118, green: 0.118, blue: 0.122)
+    static let slab = Color(.sRGB, red: 67 / 255, green: 67 / 255, blue: 67 / 255)       // flat interior, sampled raw
+    static let backdrop = Color(.sRGB, red: 37 / 255, green: 37 / 255, blue: 37 / 255)   // popover background, sampled raw
     static let chip = Color.primary.opacity(0.07)
     static let track = Color.primary.opacity(0.08)
     static let node = Color.primary.opacity(0.08)
@@ -115,16 +117,32 @@ private struct LiquidGlass<S: Shape>: ViewModifier {
         if useLiquidGlass && !reduceTransparency && !Theme.flatGlass {
             content.glassEffect(Glass.regular.tint(tint).interactive(interactive), in: shape)
         } else {
-            // AlDente's slab: flat dark fill, a faint top sheen, and a rim that's brighter at the top.
+            // AlDente's slab, sampled from its popover at 2x: flat 84-grey fill; a bright hairline along the top and
+            // bottom edges (~150) fading in over ~2 px, no bright sides; a dark halo (~42) separating it from the
+            // 49-grey background.
             content.background {
                 shape.fill(Theme.slab.mix(with: tint ?? .clear, by: tint == nil ? 0 : 0.55))
+                    // Inner glow just inside the top and bottom rims (88 → 67 over a few px in AlDente).
                     .overlay {
-                        shape.fill(LinearGradient(colors: [.white.opacity(0.07), .clear], startPoint: .top, endPoint: .center))
+                        GeometryReader { g in
+                            let fade = min(7 / max(g.size.height, 1), 0.3)
+                            shape.fill(LinearGradient(stops: [
+                                .init(color: .white.opacity(0.09), location: 0),
+                                .init(color: .clear, location: fade),
+                                .init(color: .clear, location: 1 - fade),
+                                .init(color: .white.opacity(0.11), location: 1),
+                            ], startPoint: .top, endPoint: .bottom))
+                        }
                     }
                     .overlay {
-                        shape.stroke(LinearGradient(colors: [.white.opacity(0.30), .white.opacity(0.10)], startPoint: .top, endPoint: .bottom),
-                                     lineWidth: 1)
+                        shape.stroke(LinearGradient(stops: [
+                            .init(color: .white.opacity(0.36), location: 0),
+                            .init(color: .white.opacity(0.04), location: 0.1),
+                            .init(color: .white.opacity(0.04), location: 0.9),
+                            .init(color: .white.opacity(0.33), location: 1),
+                        ], startPoint: .top, endPoint: .bottom), lineWidth: 1.2)
                     }
+                    .shadow(color: .black.opacity(0.4), radius: 1.6)
             }
         }
     }

@@ -97,6 +97,7 @@ struct PopoverView: View {
         .padding(.horizontal, 9)
         .padding(.vertical, 11)
         .frame(width: 388)
+        .foregroundStyle(Theme.text)
         .animation(.spring(response: 0.4, dampingFraction: 0.8), value: charge.isToppingUp)
         .animation(Theme.spring, value: s.minutesRemaining == nil)
         .animation(Theme.spring, value: showPowerFlow)

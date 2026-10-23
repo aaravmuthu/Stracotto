@@ -23,7 +23,7 @@ struct BatteryBar: View {
         switch state {
         case .charging: return Theme.charging
         case .paused: return Theme.paused
-        case .pluggedDraining, .onBattery: return Color(white: 0.44)
+        case .pluggedDraining, .onBattery: return Theme.slab   // same grey as the track; only the outline sets it apart
         }
     }
 
@@ -58,16 +58,12 @@ struct BatteryBar: View {
                     }
                     .blendMode(.plusLighter)
                     StatusGlyph(state: toppingUp ? .charging : state, size: height * 0.52)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Theme.text)
                         .opacity(fill > height * 2.2 ? 1 : 0)
                 }
                 .frame(width: fill, height: height)
-                .background(Capsule(style: .continuous).fill(fillColor.gradient))
-                .overlay {
-                    Capsule(style: .continuous)
-                        .stroke(LinearGradient(colors: [.white.opacity(0.35), .white.opacity(0.08)], startPoint: .top, endPoint: .bottom), lineWidth: 1)
-                }
                 .clipShape(.capsule(style: .continuous))
+                .liquidGlass(tint: fillColor == Theme.slab ? nil : fillColor, in: Capsule(style: .continuous))
                 .shadow(color: Theme.charging.opacity(0.9 * glow), radius: 14 * glow)
                 .shadow(color: Theme.bolt.opacity(0.5 * glow), radius: 4 * glow)
                 .scaleEffect(y: bounce)

@@ -54,6 +54,19 @@ struct PowerFlowView: View {
             let layout = SankeyLayout(links: links, height: size.height)
 
             ZStack(alignment: .topLeading) {
+                // Each stage's ribbons are unioned into one slab, so flows that share a node read as one shape that
+                // peels into branches (dark wedges only where they separate), exactly like AlDente.
+                ForEach(0..<2, id: \.self) { stage in
+                    let shape = StageShape(ribbons: links.filter { $0.from.column == stage }.map { link in
+                        let a = layout.end(link.id, source: true), b = layout.end(link.id, source: false)
+                        return link.watts >= 0.01 ? [a.lowerBound, a.upperBound, b.lowerBound, b.upperBound] : [0, 0, 0, 0]
+                    })
+                    Color.clear
+                        .liquidGlass(tint: stageTint(stage), in: shape)
+                        .frame(width: ribbonWidth, height: size.height)
+                        .offset(x: ribbonX[stage])
+                }
+
                 ForEach(links) { link in
                     let stage = link.from.column
                     let a = layout.end(link.id, source: true), b = layout.end(link.id, source: false)
@@ -67,13 +80,9 @@ struct PowerFlowView: View {
                                                             bottom1: abs(b.upperBound - to.upperBound) < 0.5))
                     // Glass content stays static; the moving streaks live in a separate layer above it, so the
                     // glass isn't recomposited every frame (that recompositing was the stutter).
-                    if link.watts >= 0.01 {
-                        Color.clear
-                            .liquidGlass(tint: ribbonTint(for: link), in: ribbon)
-                            .frame(width: ribbonWidth, height: size.height)
-                            .offset(x: ribbonX[stage])
-                            .transition(.opacity)
-                        FlowStreaks(watts: link.watts, color: streakColor(for: link))
+                    // Only charger and charging flows carry moving colour; plain flows stay flat like AlDente's.
+                    if link.watts >= 0.01, let color = streakColor(for: link) {
+                        FlowStreaks(watts: link.watts, color: color)
                             .clipShape(ribbon)
                             .frame(width: ribbonWidth, height: size.height)
                             .offset(x: ribbonX[stage])
@@ -100,7 +109,7 @@ struct PowerFlowView: View {
                 ForEach(links) { link in
                     if let label = labels.position(link.id) {
                         Text(Self.watts(link.watts))
-                            .font(.system(size: label.thin ? 10.5 : 13.5, weight: .bold))
+                            .font(.system(size: label.thin ? 10.5 : 13.5, weight: .semibold))
                             .monospacedDigit()
                             .contentTransition(.numericText(value: link.watts))
                             .fixedSize()
@@ -125,15 +134,20 @@ struct PowerFlowView: View {
 
     /// Each flow glows in the colour of what it carries: charger power yellow, charging green, battery help blue,
     /// SoC purple, display cyan; the rest stays white.
-    private func streakColor(for link: Link) -> Color {
+    private func streakColor(for link: Link) -> Color? {
         switch (link.from, link.to) {
         case (_, .batteryIn): Theme.charging
         case (.adapter, _): Theme.bolt
-        case (.batteryOut, _): state == .pluggedDraining ? Theme.paused : .white
-        case (_, .soc): Theme.soc
-        case (_, .display): Theme.display
-        default: .white
+        case (.batteryOut, _): state == .pluggedDraining ? Theme.paused : nil
+        default: nil
         }
+    }
+
+    private func stageTint(_ stage: Int) -> Color? {
+        guard stage == 0 else { return nil }
+        if state == .pluggedDraining { return Theme.paused.opacity(0.35) }
+        if state == .charging { return Theme.charging.opacity(0.22) }
+        return nil
     }
 
     private func ribbonTint(for link: Link) -> Color? {
@@ -172,7 +186,7 @@ private struct LabelLayout {
     private var labels: [Int: Label] = [:]
 
     init(links: [PowerFlowView.Link], layout: SankeyLayout, height: CGFloat) {
-        let minGap: CGFloat = 17
+        let minGap: CGFloat = 15
         for stage in 0...1 {
             var placed: [(id: Int, label: Label)] = links
                 .filter { $0.from.column == stage && $0.watts >= 0.01 }
@@ -180,8 +194,12 @@ private struct LabelLayout {
                     let a = layout.end(link.id, source: true), b = layout.end(link.id, source: false)
                     let thickness = min(a.upperBound - a.lowerBound, b.upperBound - b.lowerBound)
                     let mid = (a.lowerBound + a.upperBound + b.lowerBound + b.upperBound) / 4
+                    // A flat thin ribbon (display) holds its label inside like AlDente; a thin one that climbs
+                    // steeply (SoC) hangs it just under the band.
                     let thin = thickness < 24
-                    return (link.id, Label(y: thin ? mid + thickness / 2 + 9 : mid, thin: thin))
+                    let steep = abs((a.lowerBound + a.upperBound) - (b.lowerBound + b.upperBound)) / 2 > 18
+                    let inside = !thin || (thickness >= 11 && !steep)
+                    return (link.id, Label(y: inside ? mid : mid + thickness / 2 + 1.5, thin: thin))
                 }
                 .sorted { $0.label.y < $1.label.y }
             for i in placed.indices {
@@ -317,4 +335,46 @@ struct RibbonShape: Shape {
         p.closeSubpath()
         return p
     }
+}
+
+/// All ribbons of one stage as a single unioned shape. Holds a fixed number of ribbons (3) so every edge animates.
+struct StageShape: Shape {
+    var edges: EdgeVector
+
+    init(ribbons: [[CGFloat]]) { edges = EdgeVector(values: ribbons.flatMap { $0 }) }
+
+    var animatableData: EdgeVector {
+        get { edges }
+        set { edges = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        var result = Path()
+        let v = edges.values
+        for i in stride(from: 0, to: v.count - 3, by: 4) {
+            let (t0, b0, t1, b1) = (v[i], v[i + 1], v[i + 2], v[i + 3])
+            guard b0 - t0 > 0.5 || b1 - t1 > 0.5 else { continue }
+            // Square ends overlapping by a hair, so neighbours fuse with no seam; they only part where the curves do.
+            let ribbon = RibbonShape(top0: t0 - 0.5, bottom0: b0 + 0.5, top1: t1 - 0.5, bottom1: b1 + 0.5,
+                                     corners: .init(top0: false, bottom0: false, top1: false, bottom1: false)).path(in: rect)
+            result = result.isEmpty ? ribbon : result.union(ribbon)
+        }
+        return result
+    }
+}
+
+/// A fixed-length list of edge positions that SwiftUI can interpolate.
+struct EdgeVector: VectorArithmetic {
+    var values: [CGFloat]
+
+    static var zero: EdgeVector { EdgeVector(values: []) }
+
+    private static func zip(_ a: EdgeVector, _ b: EdgeVector, _ f: (CGFloat, CGFloat) -> CGFloat) -> EdgeVector {
+        let n = max(a.values.count, b.values.count)
+        return EdgeVector(values: (0..<n).map { f($0 < a.values.count ? a.values[$0] : 0, $0 < b.values.count ? b.values[$0] : 0) })
+    }
+    static func + (a: EdgeVector, b: EdgeVector) -> EdgeVector { zip(a, b, +) }
+    static func - (a: EdgeVector, b: EdgeVector) -> EdgeVector { zip(a, b, -) }
+    mutating func scale(by rhs: Double) { values = values.map { $0 * CGFloat(rhs) } }
+    var magnitudeSquared: Double { values.reduce(0) { $0 + Double($1 * $1) } }
 }
