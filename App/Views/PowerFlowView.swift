@@ -63,7 +63,8 @@ struct PowerFlowView: View {
                     let stageLinks = links.filter { $0.from.column == stage }
                     let shape = StageShape(ribbons: stageLinks.map { link in
                         let a = layout.end(link.id, source: true), b = layout.end(link.id, source: false)
-                        return link.watts >= 0.01 ? [a.lowerBound, a.upperBound, b.lowerBound, b.upperBound] : [0, 0, 0, 0]
+                        return link.watts >= 0.01 ? [a.lowerBound, a.upperBound, b.lowerBound, b.upperBound]
+                            : [a.lowerBound, a.lowerBound, b.lowerBound, b.lowerBound]   // collapse in place, so it grows/shrinks smoothly
                     }, corners: stageLinks.map { link in
                         // Round only where the ribbon meets a node's outer edge; inner edges stay square so neighbours fuse.
                         let a = layout.end(link.id, source: true), b = layout.end(link.id, source: false)
@@ -126,17 +127,17 @@ struct PowerFlowView: View {
                 }
 
                 // Labels last and laid out together: always on top, never overlapping, never outside the view.
-                let labels = LabelLayout(links: links, layout: layout, height: size.height)
+                let labels = LabelLayout(links: links, layout: layout, width: ribbonWidth)
                 ForEach(links) { link in
                     if let label = labels.position(link.id) {
                         Text(Self.watts(link.watts))
-                            .font(.system(size: label.thin ? 12 : 12.5, weight: .semibold))
+                            .font(.system(size: label.thin ? 11 : 12.5, weight: .semibold))
                             .monospacedDigit()
                             .contentTransition(.numericText(value: link.watts))
                             .fixedSize()
                             .shadow(color: .black.opacity(0.7), radius: 2.5)
                             .shadow(color: .black.opacity(0.5), radius: 1)
-                            .position(x: ribbonX[link.from.column] + ribbonWidth * 0.5, y: label.y)
+                            .position(x: ribbonX[link.from.column] + label.x, y: label.y)
                             .transition(.opacity)
                     }
                 }
@@ -148,7 +149,7 @@ struct PowerFlowView: View {
         }
         .frame(height: height)
         // Readings land every 2 s; a slightly shorter glide keeps shapes in continuous motion instead of stop-start.
-        .animation(.smooth(duration: 1.6), value: flow)
+        .animation(.spring(response: 1.5, dampingFraction: 1), value: flow)
         .animation(.smooth(duration: 0.6), value: state)
     }
 
@@ -240,36 +241,25 @@ struct PowerFlowView: View {
 /// Where each watt label goes. Thick ribbons hold their label at the centre; thin ones hang it just under the band.
 /// Labels in the same stage are then pushed apart so none overlap, and clamped inside the view.
 private struct LabelLayout {
-    struct Label { var y: CGFloat; let thin: Bool }
+    struct Label { var x: CGFloat; var y: CGFloat; let thin: Bool }
     private var labels: [Int: Label] = [:]
 
-    init(links: [PowerFlowView.Link], layout: SankeyLayout, height: CGFloat) {
-        let minGap: CGFloat = 15
-        for stage in 0...1 {
-            var placed: [(id: Int, label: Label)] = links
-                .filter { $0.from.column == stage && $0.watts >= 0.01 }
-                .map { link in
-                    let a = layout.end(link.id, source: true), b = layout.end(link.id, source: false)
-                    let thickness = min(a.upperBound - a.lowerBound, b.upperBound - b.lowerBound)
-                    let mid = (a.lowerBound + a.upperBound + b.lowerBound + b.upperBound) / 4
-                    // A flat thin ribbon (display) holds its label inside like AlDente; a thin one that climbs
-                    // steeply (SoC) hangs it just under the band.
-                    let thin = thickness < 24
-                    let steep = abs((a.lowerBound + a.upperBound) - (b.lowerBound + b.upperBound)) / 2 > 18
-                    let inside = !thin || (thickness >= 11 && !steep)
-                    return (link.id, Label(y: inside ? mid : mid + thickness / 2 + 1.5, thin: thin))
-                }
-                .sorted { $0.label.y < $1.label.y }
-            for i in placed.indices {
-                placed[i].label.y = max(placed[i].label.y, 9)
-                if i > 0 { placed[i].label.y = max(placed[i].label.y, placed[i - 1].label.y + minGap) }
+    /// Every label sits inside its own branch. Thick bands hold it at the middle of the curve; thin branches hold it
+    /// where they have fully peeled away (70 % along), centred on the band, so it never lands on a neighbour.
+    init(links: [PowerFlowView.Link], layout: SankeyLayout, width: CGFloat) {
+        for link in links where link.watts >= 0.01 {
+            let a = layout.end(link.id, source: true), b = layout.end(link.id, source: false)
+            let thickness = min(a.upperBound - a.lowerBound, b.upperBound - b.lowerBound)
+            let thin = thickness < 30
+            let u: CGFloat = thin ? 0.72 : 0.5
+            func bez(_ p0: CGFloat, _ p1: CGFloat, _ p2: CGFloat, _ p3: CGFloat) -> CGFloat {
+                let m = 1 - u
+                return m * m * m * p0 + 3 * m * m * u * p1 + 3 * m * u * u * p2 + u * u * u * p3
             }
-            // If the stack ran off the bottom, slide everything back up.
-            if let last = placed.last, last.label.y > height - 9 {
-                let shift = last.label.y - (height - 9)
-                for i in placed.indices { placed[i].label.y -= shift }
-            }
-            for p in placed { labels[p.id] = p.label }
+            let x = bez(0, width / 2, width / 2, width)
+            let top = bez(a.lowerBound, a.lowerBound, b.lowerBound, b.lowerBound)
+            let bottom = bez(a.upperBound, a.upperBound, b.upperBound, b.upperBound)
+            labels[link.id] = Label(x: x, y: (top + bottom) / 2, thin: thin)
         }
     }
 

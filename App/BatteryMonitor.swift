@@ -124,7 +124,7 @@ final class BatteryMonitor {
         s.lowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
         if s.isPluggedIn && !snapshot.isPluggedIn && !history.isEmpty { plugEvents += 1 }
         // Ease the flow toward the new reading so the diagram glides; jump straight there when power state changes.
-        if s.state == snapshot.state { s.flow = snapshot.flow.easing(toward: s.flow) }
+        if s.state == snapshot.state { s.flow = snapshot.flow.easing(toward: s.flow, by: 0.7) }
         s.minutesRemaining = estimateMinutes(s) ?? s.minutesRemaining
         snapshot = s
         onUpdate?(s)
