@@ -85,8 +85,8 @@ struct PowerFlowView: View {
                     // The branch into the CPU turns purple as it arrives.
                     if stage == 1, let soc = stageLinks.first(where: { $0.to == .soc && $0.watts >= 0.01 }) {
                         let a = layout.end(soc.id, source: true), b = layout.end(soc.id, source: false)
-                        LinearGradient(stops: [.init(color: .clear, location: 0.2), .init(color: Theme.soc.opacity(0.55), location: 0.75),
-                                               .init(color: Theme.soc.opacity(0.85), location: 1)],
+                        LinearGradient(stops: [.init(color: .clear, location: 0.2), .init(color: Theme.soc.opacity(0.35), location: 0.7),
+                                               .init(color: Theme.soc.opacity(0.6), location: 1)],
                                        startPoint: .leading, endPoint: .trailing)
                             .clipShape(RibbonShape(top0: a.lowerBound, bottom0: a.upperBound, top1: b.lowerBound, bottom1: b.upperBound))
                             .clipShape(shape)
@@ -189,7 +189,7 @@ struct PowerFlowView: View {
             case .batteryOut: Image(systemName: "battery.100percent").font(.system(size: iconSize))
             case .batteryIn: Image(systemName: "battery.100percent.bolt").font(.system(size: iconSize))
             case .mac: Image(systemName: "laptopcomputer").font(.system(size: iconSize)).foregroundStyle(palette.accent.mix(with: .white, by: 0.25))
-            case .soc: Image(systemName: "cpu").font(.system(size: iconSize)).foregroundStyle(Theme.soc.mix(with: .white, by: 0.3))
+            case .soc: Image(systemName: "cpu").font(.system(size: iconSize)).foregroundStyle(Theme.soc)
             case .display: Image(systemName: "display").font(.system(size: iconSize)).foregroundStyle(Theme.displayAmber)
             case .other: Image(systemName: "ellipsis").font(.system(size: iconSize, weight: .bold)).foregroundStyle(Theme.otherMint)
             }

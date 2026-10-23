@@ -16,7 +16,7 @@ enum Theme {
     static let batteryWarm = Color(.sRGB, red: 0.80, green: 0.56, blue: 0.40)
     static let displayAmber = Color(.sRGB, red: 0.86, green: 0.72, blue: 0.55)
     static let otherMint = Color(.sRGB, red: 0.56, green: 0.82, blue: 0.68)
-    static let soc = Color(red: 0.69, green: 0.45, blue: 0.98)
+    static let soc = Color(.sRGB, red: 0.80, green: 0.70, blue: 1.0)   // light lavender
     static let display = Color(red: 0.35, green: 0.78, blue: 0.98)
     /// Current AlDente fills a discharging battery in neutral glass-gray, not orange.
     static let discharging = Color(white: 0.62)
