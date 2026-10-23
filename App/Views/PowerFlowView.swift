@@ -420,13 +420,17 @@ private struct StageGradient: View {
         }
     }
 
-    /// The same gradient, sampled finely, with a soft swell of its own colour travelling left to right.
+    /// The same gradient, sampled finely, with pulses of its own colour sliding along it toward the Mac (left to
+    /// right). Pulses add absolute brightness, so they stay visible even where the wash is faint.
     private func stops(phase: Double) -> [Gradient.Stop] {
-        (0...24).map { i in
-            let x = Double(i) / 24
+        (0...40).map { i in
+            let x = Double(i) / 40
             let (color, opacity) = sample(x)
-            let wave = 1 + 0.32 * sin(2 * .pi * (x * 1.5 - phase))
-            return .init(color: color.opacity(min(opacity * wave, 1)), location: x)
+            // Two pulses per stage width; smooth, peaky shape so each reads as a travelling packet.
+            let w = 0.5 + 0.5 * cos(2 * .pi * (x * 2 - phase * 2))
+            let pulse = pow(w, 3)
+            let accent = palette.accent
+            return .init(color: color.mix(with: accent, by: pulse * 0.6).opacity(min(opacity + 0.30 * pulse, 1)), location: x)
         }
     }
 

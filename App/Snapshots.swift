@@ -75,6 +75,22 @@ enum Snapshots {
             }
             exit(0)
         }
+        if let i = args.firstIndex(of: "--flow-frames"), i + 1 < args.count {
+            // Renders the Power Flow at several moments, to check that it actually moves.
+            Theme.flatGlass = true
+            let dir = URL(fileURLWithPath: args[i + 1])
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let snap = sampleStates().first { $0.0 == "low" }!.1
+            for f in 0..<4 {
+                let start = Date()
+                while Date().timeIntervalSince(start) < 0.3 { RunLoop.main.run(until: Date().addingTimeInterval(0.05)) }
+                let r = ImageRenderer(content: PowerFlowView(flow: snap.flow, state: snap.state, adapterWatts: nil, height: 181)
+                    .frame(width: 370).padding(8).background(Theme.backdrop).environment(\.colorScheme, .dark))
+                r.scale = 2
+                if let cg = r.cgImage { try? NSBitmapImageRep(cgImage: cg).representation(using: .png, properties: [:])?.write(to: dir.appendingPathComponent("f\(f).png")) }
+            }
+            exit(0)
+        }
         if args.contains("--dump") {
             let monitor = BatteryMonitor()
             RunLoop.main.run(until: Date().addingTimeInterval(3)) // let the system_profiler health read land
