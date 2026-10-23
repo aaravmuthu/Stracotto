@@ -54,7 +54,7 @@ struct PowerFlowView: View {
             let ribbonWidth = (size.width - nodeWidth * 3 - gap * 4) / 2
             let columnX: [CGFloat] = [0, nodeWidth + gap * 2 + ribbonWidth, size.width - nodeWidth]
             let ribbonX: [CGFloat] = [nodeWidth + gap, columnX[1] + nodeWidth + gap]
-            let layout = SankeyLayout(links: links, height: size.height)
+            let layout = SankeyLayout(links: links, height: size.height, idleBattery: batteryIdle)
 
             ZStack(alignment: .topLeading) {
                 // Each stage's ribbons are unioned into one slab, so flows that share a node read as one shape that
@@ -153,6 +153,11 @@ struct PowerFlowView: View {
     }
 
     /// Inner corners are tight; the corners on the diagram's outside edge are much rounder, as in AlDente.
+    /// Plugged in, and the battery neither charging nor helping.
+    private var batteryIdle: Bool {
+        state != .onBattery && flow.batteryToSystem < 0.01 && flow.adapterToBattery < 0.01
+    }
+
     private func nodeShape(_ node: Node, _ h: CGFloat) -> UnevenRoundedRectangle {
         let inner = min(10, h / 2.2), outer = min(24, h / 2.2)
         switch node.column {
@@ -216,7 +221,11 @@ struct PowerFlowView: View {
                     .foregroundStyle(state == .charging ? Theme.bolt : .primary)
                     .symbolEffect(.bounce.up.byLayer, value: plugEvents)
                 if let adapterWatts, height > 80 { Text("\(adapterWatts)W").font(.system(size: 13)) }
-            case .batteryOut: Image(systemName: "battery.100percent").font(.system(size: iconSize, weight: .light)).foregroundStyle(Theme.text.opacity(0.8))
+            case .batteryOut:
+                Image(systemName: "battery.100percent")
+                    .font(.system(size: iconSize, weight: .light))
+                    .foregroundStyle(Theme.text.opacity(batteryIdle ? 0.5 : 0.8))
+                    .help(batteryIdle ? "Battery is resting: the charger is powering the Mac" : "Battery")
             case .batteryIn: Image(systemName: "battery.100percent.bolt").font(.system(size: iconSize))
             case .mac: Image(systemName: "laptopcomputer").font(.system(size: iconSize, weight: .light)).foregroundStyle(palette.accent.mix(with: .white, by: 0.35))
             case .soc: Image(systemName: "cpu").font(.system(size: iconSize)).foregroundStyle(Theme.soc)
@@ -273,7 +282,7 @@ private struct SankeyLayout {
     private var sourceEnds: [Int: ClosedRange<CGFloat>] = [:]
     private var sinkEnds: [Int: ClosedRange<CGFloat>] = [:]
 
-    init(links: [PowerFlowView.Link], height: CGFloat) {
+    init(links: [PowerFlowView.Link], height: CGFloat, idleBattery: Bool = false) {
         func incoming(_ n: PowerFlowView.Node) -> Double { links.filter { $0.to == n }.reduce(0) { $0 + $1.watts } }
         func outgoing(_ n: PowerFlowView.Node) -> Double { links.filter { $0.from == n }.reduce(0) { $0 + $1.watts } }
         func weight(_ n: PowerFlowView.Node) -> Double { max(incoming(n), outgoing(n)) }
@@ -287,6 +296,14 @@ private struct SankeyLayout {
             let active = members.filter { weight($0) > 0 }
             let total = active.reduce(0) { $0 + weight($1) }
             var heights: [PowerFlowView.Node: CGFloat] = [:]
+            if column == 0, idleBattery, weight(.adapter) > 0, weight(.batteryOut) == 0 {
+                // Plugged in but the battery is just sitting there: still show it, under the charger, as one block.
+                let batteryH: CGFloat = 46
+                let top = (height - mainHeight) / 2
+                nodes[.adapter] = top...(top + mainHeight - batteryH - nodeGap)
+                nodes[.batteryOut] = (top + mainHeight - batteryH)...(top + mainHeight)
+                continue
+            }
             if column < 2 {
                 if active.count == 1 { heights[active[0]] = mainHeight }
                 else if total > 0 {
