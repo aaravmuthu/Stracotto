@@ -47,6 +47,13 @@ final class ChargeController {
         observeSystemChanges()
     }
 
+    /// For snapshots and docs: a fixed limit that never reads or writes the Mac's real charge limit.
+    init(previewLimit: Int) {
+        allowedLimits = [80, 85, 90, 95, 100]
+        backendStatus = .ready
+        limit = previewLimit
+    }
+
     /// Nearest value the hardware accepts, for the slider's drag.
     func snapped(_ value: Int) -> Int {
         allowedLimits.min { abs($0 - value) < abs($1 - value) } ?? value

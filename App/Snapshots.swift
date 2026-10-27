@@ -32,7 +32,7 @@ enum Snapshots {
         low.percent = 8; low.minutesRemaining = 24; low.amperage = -1.46; low.voltage = 10.74
         low.flow = PowerFlow(adapterToSystem: 0, adapterToBattery: 0, batteryToSystem: 15.7, systemLoad: 16.31, soc: nil, gpu: nil, display: 2.21)
         var live = reference
-        live.percent = 42; live.flow = PowerFlow(adapterToSystem: 0, adapterToBattery: 0, batteryToSystem: 11.2, systemLoad: 11.2, soc: 3.12, gpu: 0.78, display: nil)
+        live.percent = 42; live.flow = PowerFlow(adapterToSystem: 0, adapterToBattery: 0, batteryToSystem: 11.2, systemLoad: 11.2, soc: 3.12, gpu: 0.78, display: 1.40)
         var heavy = reference
         heavy.flow = PowerFlow(adapterToSystem: 0, adapterToBattery: 0, batteryToSystem: 24, systemLoad: 24, soc: 10.80, gpu: 2.70, display: 2.0)
         return [("live", live), ("heavy", heavy), ("charging", charging), ("paused", paused), ("draining", draining), ("battery", battery), ("reference", reference), ("low", low)]
@@ -50,7 +50,7 @@ enum Snapshots {
                 .padding(.vertical, 6)
                 .environment(BatteryMonitor(fixed: snap))
                 .environment(EnergyMonitor(fixed: name == "draining" ? sampleApps : []))
-                .environment(ChargeController())
+                .environment(ChargeController(previewLimit: 95))
             let window = NSWindow(contentViewController: NSHostingController(rootView: view))
             window.title = "Stracotto Preview – \(name)"
             window.isReleasedWhenClosed = false
@@ -123,7 +123,7 @@ enum Snapshots {
             let view = PopoverView()
                 .environment(BatteryMonitor(fixed: snap))
                 .environment(EnergyMonitor(fixed: apps))
-                .environment(ChargeController())
+                .environment(ChargeController(previewLimit: 95))
                 .environment(\.colorScheme, .dark)
                 .background(Theme.backdrop)
                 .environment(\.colorScheme, .dark)
@@ -135,7 +135,15 @@ enum Snapshots {
             }
         }
         // Menu bar item on a dark and a light bar.
-        for (name, snap, scheme) in [("menubar-charging", charging, ColorScheme.dark), ("menubar-battery-low", { var b = battery; b.percent = 14; return b }(), .light), ("menubar-paused", paused, .dark)] {
+        let timerBattery = { var b = battery; b.percent = 42; b.minutesRemaining = 155; return b }()
+        for (name, snap, scheme) in [("menubar-charging", charging, ColorScheme.dark), ("menubar-battery-low", { var b = battery; b.percent = 14; return b }(), .light), ("menubar-paused", paused, .dark),
+                                     ("menubar-timer-charging", charging, .dark), ("menubar-timer-battery", timerBattery, .dark)] {
+            // The time readout (with its clock / charger icon) is an opt-in menu bar stat.
+            UserDefaults.standard.setVolatileDomain([
+                ChargePrefs.sailing: true, ChargePrefs.sailingRange: 5.0, Prefs.showHardwarePercent: false,
+                AppearancePrefs.showPowerMode: false, AppearancePrefs.iconStyle: MenuBarStyle.native.rawValue,
+                AppearancePrefs.stats: name.hasPrefix("menubar-timer") ? MenuBarStat.timeRemaining.rawValue : "",
+            ], forName: UserDefaults.argumentDomain)
             let bar = MenuBarIcon()
                 .environment(BatteryMonitor(fixed: snap))
                 .environment(EnergyMonitor(fixed: name == "menubar-charging" ? [.init(id: "/Applications/Xcode.app", name: "Xcode", watts: 9)] : []))

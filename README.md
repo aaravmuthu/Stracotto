@@ -24,9 +24,11 @@
 
 <p align="center"><img src="docs/images/power-flow.png" alt="Power Flow" width="100%"></p>
 
-**Power Flow** draws your Mac's power as it moves: from the charger or battery, into the Mac, and out to the CPU,
-display and everything else. Each branch carries its live wattage and the colour flows the way the energy does:
-warm at the source, blue through the Mac, lavender at the chip, green and gold while charging.
+**Power Flow** draws your Mac's power as it moves: from the charger or battery, into the Mac, and out to the CPU, GPU,
+display and everything else. (The GPU and display branches are estimates: macOS only reports their power to root, so
+Stracotto derives them from GPU load and your backlight level.) Each branch carries its live wattage and the colour flows the way the energy does:
+warm at the source, blue through the Mac, lavender at the CPU, rose at the GPU, amber at the display, green and gold
+while charging.
 Tap any node for the detail behind it: the apps working your CPU, your display's brightness, the charger's negotiated
 voltage, the battery's health.
 
@@ -53,7 +55,9 @@ while charging it counts down to *your limit*, not to 100 %, accounting for the 
 
 Stracotto's menu bar battery takes the place of the system one. The percentage sits inside the cell, it flashes green
 with a sweep of light the moment you plug in, turns red when you're low, and a flame appears when an app starts pulling
-serious power. Add temperature, watts or time remaining beside it, or switch to a text-only style.
+serious power. Add temperature, watts or time remaining beside it, or switch to a text-only style. The time readout carries its own
+icon: a clock on battery, a softly glowing green bolt while charging, a yellow plug when you're plugged in but not
+filling.
 
 ## Everything else
 
