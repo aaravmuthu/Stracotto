@@ -46,7 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 /// Owns the status item, its popover, and the settings window.
 @MainActor
-final class StatusController: NSObject, NSPopoverDelegate {
+final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
     private let statusItem: NSStatusItem
     private let popover = NSPopover()
     private var settingsWindow: NSWindow?
@@ -83,20 +83,6 @@ final class StatusController: NSObject, NSPopoverDelegate {
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         AppearanceMode.apply(UserDefaults.standard.string(forKey: AppearancePrefs.mode) ?? "system")
 
-        // The popover is resized by hand from the content's ideal height, inside an animation group, so the window
-        // grows in step with SwiftUI's transitions instead of snapping a frame later.
-        let content = NSHostingController(rootView: PopoverView()
-            .fixedSize(horizontal: false, vertical: true)
-            .onGeometryChange(for: CGFloat.self, of: \.size.height) { [weak self] height in self?.resizePopover(to: height) }
-            .frame(maxHeight: .infinity, alignment: .top)
-            // AlDente's popover is dark and calm; tone down the desktop showing through the popover glass.
-            .background(Theme.backdrop.opacity(0.94))
-            .environment(battery)
-            .environment(energy)
-            .environment(charge)
-            .environment(\.showSettings, SettingsOpener { [weak self] in self?.showSettings() }))
-        content.sizingOptions = []
-        popover.contentViewController = content
         popover.behavior = .transient
         popover.animates = true
         popover.delegate = self
@@ -127,13 +113,50 @@ final class StatusController: NSObject, NSPopoverDelegate {
         if popover.isShown {
             popover.performClose(nil)
         } else {
+            // Built fresh on every open and torn down on close: a hidden hosting view keeps animating (and re-running
+            // the Power Flow path maths) even offscreen, which was most of the app's idle CPU.
+            popover.contentViewController = makePopoverContent()
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()
             button.highlight(true)
+            updateActivity()
         }
     }
 
-    func popoverDidClose(_ notification: Notification) { statusItem.button?.highlight(false) }
+    func popoverDidClose(_ notification: Notification) {
+        statusItem.button?.highlight(false)
+        popover.contentViewController = nil
+        updateActivity()
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        // isVisible is still true inside willClose; look again once the window is gone.
+        DispatchQueue.main.async { [weak self] in self?.updateActivity() }
+    }
+
+    /// Fast polling and live per-app energy only while something on screen shows them.
+    private func updateActivity() {
+        let active = popover.isShown || settingsWindow?.isVisible == true
+        battery.setActive(active)
+        energy.setActive(active)
+    }
+
+    private func makePopoverContent() -> NSViewController {
+        // The popover is resized by hand from the content's ideal height, inside an animation group, so the window
+        // grows in step with SwiftUI's transitions instead of snapping a frame later.
+        let content = NSHostingController(rootView: PopoverView()
+            .fixedSize(horizontal: false, vertical: true)
+            .onGeometryChange(for: CGFloat.self, of: \.size.height) { [weak self] height in self?.resizePopover(to: height) }
+            .frame(maxHeight: .infinity, alignment: .top)
+            // AlDente's popover is dark and calm; tone down the desktop showing through the popover glass.
+            .background(Theme.backdrop.opacity(0.88))
+            .environment(battery)
+            .environment(energy)
+            .environment(charge)
+            .environment(\.showSettings, SettingsOpener { [weak self] in self?.showSettings() }))
+        content.sizingOptions = []
+        return content
+    }
 
     private func resizePopover(to height: CGFloat) {
         let size = NSSize(width: 380, height: ceil(height))
@@ -159,11 +182,13 @@ final class StatusController: NSObject, NSPopoverDelegate {
             window.titlebarAppearsTransparent = true
             window.title = "Stracotto"
             window.isReleasedWhenClosed = false
+            window.delegate = self
             window.center()
             settingsWindow = window
         }
         NSApp.activate()
         settingsWindow?.makeKeyAndOrderFront(nil)
+        updateActivity()
     }
 }
 

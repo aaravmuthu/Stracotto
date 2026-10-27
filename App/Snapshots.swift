@@ -10,16 +10,16 @@ enum Snapshots {
 
         var charging = base
         charging.percent = 80; charging.state = .charging; charging.isPluggedIn = true; charging.minutesRemaining = 42; charging.amperage = 1.23
-        charging.flow = PowerFlow(adapterToSystem: 20.16, adapterToBattery: 15.52, batteryToSystem: 0, systemLoad: 20.16)
+        charging.flow = PowerFlow(adapterToSystem: 20.16, adapterToBattery: 15.52, batteryToSystem: 0, systemLoad: 20.16, soc: 9.4, gpu: 2.1, display: 2.6)
         var paused = base
         paused.percent = 80; paused.state = .paused; paused.isPluggedIn = true
-        paused.flow = PowerFlow(adapterToSystem: 21.07, adapterToBattery: 0, batteryToSystem: 0, systemLoad: 21.07)
+        paused.flow = PowerFlow(adapterToSystem: 21.07, adapterToBattery: 0, batteryToSystem: 0, systemLoad: 21.07, soc: 10.2, gpu: 1.4, display: 2.6)
         var draining = base
         draining.percent = 79; draining.state = .pluggedDraining; draining.isPluggedIn = true; draining.minutesRemaining = 95; draining.amperage = -2.6
         draining.flow = PowerFlow(adapterToSystem: 28.39, adapterToBattery: 0, batteryToSystem: 32.93, systemLoad: 61.32)
         var battery = base
         battery.percent = 27; battery.state = .onBattery; battery.minutesRemaining = 130; battery.adapterWatts = nil; battery.amperage = -1.48
-        battery.flow = PowerFlow(adapterToSystem: 0, adapterToBattery: 0, batteryToSystem: 19.4, systemLoad: 14.62, soc: 1.55, display: 1.46)
+        battery.flow = PowerFlow(adapterToSystem: 0, adapterToBattery: 0, batteryToSystem: 19.4, systemLoad: 14.62, soc: 1.24, gpu: 0.31, display: 1.46)
         battery.percent = 34
 
         // Same numbers as the user's AlDente reference screenshot, for side-by-side comparison.
@@ -27,14 +27,14 @@ enum Snapshots {
         reference.percent = 34; reference.state = .onBattery; reference.minutesRemaining = 48; reference.adapterWatts = nil
         reference.cycleCount = 558; reference.health = 79; reference.fullChargeCapacity = 4779; reference.temperature = 28.1
         reference.amperage = -1.76; reference.voltage = 11.0
-        reference.flow = PowerFlow(adapterToSystem: 0, adapterToBattery: 0, batteryToSystem: 19.4, systemLoad: 14.62, soc: 1.55, display: 1.46)
+        reference.flow = PowerFlow(adapterToSystem: 0, adapterToBattery: 0, batteryToSystem: 19.4, systemLoad: 14.62, soc: 1.24, gpu: 0.31, display: 1.46)
         var low = reference
         low.percent = 8; low.minutesRemaining = 24; low.amperage = -1.46; low.voltage = 10.74
-        low.flow = PowerFlow(adapterToSystem: 0, adapterToBattery: 0, batteryToSystem: 15.7, systemLoad: 16.31, soc: nil, display: 2.21)
+        low.flow = PowerFlow(adapterToSystem: 0, adapterToBattery: 0, batteryToSystem: 15.7, systemLoad: 16.31, soc: nil, gpu: nil, display: 2.21)
         var live = reference
-        live.percent = 42; live.flow = PowerFlow(adapterToSystem: 0, adapterToBattery: 0, batteryToSystem: 11.2, systemLoad: 11.2, soc: 3.9, display: nil)
+        live.percent = 42; live.flow = PowerFlow(adapterToSystem: 0, adapterToBattery: 0, batteryToSystem: 11.2, systemLoad: 11.2, soc: 3.12, gpu: 0.78, display: nil)
         var heavy = reference
-        heavy.flow = PowerFlow(adapterToSystem: 0, adapterToBattery: 0, batteryToSystem: 24, systemLoad: 24, soc: 13.5, display: 2.0)
+        heavy.flow = PowerFlow(adapterToSystem: 0, adapterToBattery: 0, batteryToSystem: 24, systemLoad: 24, soc: 10.80, gpu: 2.70, display: 2.0)
         return [("live", live), ("heavy", heavy), ("charging", charging), ("paused", paused), ("draining", draining), ("battery", battery), ("reference", reference), ("low", low)]
     }
 
