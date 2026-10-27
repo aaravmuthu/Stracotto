@@ -35,6 +35,8 @@ enum MenuBarStat: String, CaseIterable, Identifiable {
         }
     }
     static let width: CGFloat = 46
+    /// The time stat carries a state icon (clock / charger) on its leading side.
+    var slotWidth: CGFloat { (self == .timeRemaining ? Self.width + 15 : Self.width) }
 
     func value(_ s: BatterySnapshot) -> String {
         switch self {
@@ -54,6 +56,40 @@ enum MenuBarStat: String, CaseIterable, Identifiable {
         var list = parse(raw)
         if let i = list.firstIndex(of: stat) { list.remove(at: i) } else { list.append(stat) }
         return list.map(\.rawValue).joined(separator: ",")
+    }
+}
+
+/// Beside a time readout: a clock while draining; while a charger is attached, a charger that glows green as it fills
+/// and sits yellow when it's plugged in but not filling.
+struct TimeStateIcon: View {
+    let state: PowerState
+    var size: CGFloat = 12
+
+    private var symbol: String {
+        switch state {
+        case .onBattery: "clock"
+        case .charging: "bolt.fill"
+        case .paused, .pluggedDraining: "powerplug.portrait.fill"
+        }
+    }
+
+    private var color: Color? {
+        switch state {
+        case .onBattery: nil
+        case .charging: Theme.charging
+        case .paused, .pluggedDraining: Theme.bolt
+        }
+    }
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: size, weight: .semibold))
+            .foregroundStyle(color ?? Theme.text)
+            // A soft halo only while a charger is involved, like the icon is lit from behind.
+            .shadow(color: (color ?? .clear).opacity(color == nil ? 0 : 0.85), radius: 3)
+            .shadow(color: (color ?? .clear).opacity(color == nil ? 0 : 0.45), radius: 7)
+            .contentTransition(.symbolEffect(.replace.downUp))
+            .animation(.smooth(duration: 0.4), value: state)
     }
 }
 

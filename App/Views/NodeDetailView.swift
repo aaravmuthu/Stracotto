@@ -8,6 +8,7 @@ extension PowerFlowView.Node {
         case .batteryOut, .batteryIn: "Battery"
         case .mac: "This Mac"
         case .soc: ChipInfo.name
+        case .gpu: "Graphics"
         case .display: "Display"
         case .other: "Everything Else"
         }
@@ -37,7 +38,9 @@ struct NodeDetailView: View {
             }
             Divider()
             switch node {
-            case .soc, .mac, .other:
+            case .soc, .gpu, .mac, .other:
+                if node == .gpu { Text("Estimated from the GPU's busy share of the chip's measured power; macOS has no separate GPU power sensor without root.")
+                    .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
                 if node == .soc { rows([("Cores", ChipInfo.cores), ("Memory", ChipInfo.memory),
                                         ("Share of system load", percent(flow.soc, of: flow.systemLoad))]) }
                 if node == .mac { rows([("Total load", PowerFlowView.watts(flow.systemLoad)),
@@ -118,14 +121,16 @@ struct NodeDetailView: View {
         case .batteryIn: flow.adapterToBattery
         case .mac: flow.systemLoad
         case .soc: flow.soc
+        case .gpu: flow.gpu
         case .display: flow.display
-        case .other: max(flow.systemLoad - (flow.soc ?? 0) - (flow.display ?? 0), 0)
+        case .other: max(flow.systemLoad - (flow.soc ?? 0) - (flow.gpu ?? 0) - (flow.display ?? 0), 0)
         }
     }
 
     private var subtitle: String? {
         switch node {
-        case .soc: "CPU + GPU + Neural Engine"
+        case .soc: "CPU + Neural Engine"
+        case .gpu: "Estimated"
         case .display: NSScreen.main?.localizedName
         case .adapter: battery.snapshot.adapterName
         case .mac: Host.current().localizedName
@@ -139,6 +144,7 @@ struct NodeDetailView: View {
         case .batteryOut, .batteryIn: "battery.100percent"
         case .mac: "laptopcomputer"
         case .soc: "cpu"
+        case .gpu: "cube.transparent.fill"
         case .display: "display"
         case .other: "ellipsis.circle"
         }
@@ -148,6 +154,7 @@ struct NodeDetailView: View {
         switch node {
         case .adapter: Theme.bolt
         case .soc: Theme.soc
+        case .gpu: Theme.gpu
         case .display: Theme.displayAmber
         case .other: Theme.otherMint
         case .batteryIn: Theme.charging

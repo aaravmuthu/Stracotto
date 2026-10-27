@@ -44,7 +44,10 @@ struct PowerFlow: Equatable, Sendable {
     var systemLoad: Double = 0
     /// Per-consumer breakdown for the second stage of the flow; nil until a verified source exists.
     var soc: Double?
+    var gpu: Double?
     var display: Double?
+    /// True when `display` is estimated from brightness rather than measured.
+    var displayIsEstimate = true
     var adapterIn: Double { adapterToSystem + adapterToBattery }
 
     func easing(toward target: PowerFlow, by k: Double = 0.55) -> PowerFlow {
@@ -54,7 +57,7 @@ struct PowerFlow: Equatable, Sendable {
                          adapterToBattery: ease(adapterToBattery, target.adapterToBattery),
                          batteryToSystem: ease(batteryToSystem, target.batteryToSystem),
                          systemLoad: ease(systemLoad, target.systemLoad),
-                         soc: ease(soc, target.soc), display: ease(display, target.display))
+                         soc: ease(soc, target.soc), gpu: ease(gpu, target.gpu), display: ease(display, target.display))
     }
 }
 
@@ -74,6 +77,7 @@ final class BatteryMonitor {
     struct Sample: Identifiable, Sendable { let id = UUID(); let date: Date; let percent: Int; let watts: Double }
 
     private var timer: Timer?
+    private var isActive = false
     private var runLoopSource: CFRunLoopSource?
     private var healthTask: Task<Void, Never>?
     private var cachedHealth: (value: Int, condition: String)?
@@ -86,10 +90,28 @@ final class BatteryMonitor {
     /// Fixed data for snapshots; never polls.
     init(fixed: BatterySnapshot) { snapshot = fixed }
 
-    private func start() {
-        timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+    /// 2 s while the popover or dashboard is on screen (the flow diagram glides on these readings); 15 s otherwise,
+    /// since plug/unplug arrives by notification and the menu bar only needs the percentage.
+    func setActive(_ active: Bool) {
+        guard active != isActive else { return }
+        isActive = active
+        schedule()
+        if active { refresh() }
+    }
+
+    private func schedule() {
+        timer?.invalidate()
+        let interval: TimeInterval = isActive ? 2 : 15
+        let t = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.refresh() }
         }
+        t.tolerance = interval * 0.25   // lets macOS coalesce our wake-ups with others'
+        RunLoop.main.add(t, forMode: .common)
+        timer = t
+    }
+
+    private func start() {
+        schedule()
         // Plug/unplug lands instantly instead of waiting for the next tick.
         let context = Unmanaged.passUnretained(self).toOpaque()
         if let source = IOPSNotificationCreateRunLoopSource({ ctx in
@@ -120,7 +142,17 @@ final class BatteryMonitor {
         }
         s.temperature = Self.smcTemperature() ?? s.temperature
         // PHPC tracks CPU/GPU load (3 W idle → 13 W under load on an M3); used as the SoC branch of the flow.
-        if let soc = SMC.shared?.number("PHPC"), soc > 0, soc < s.flow.systemLoad { s.flow.soc = soc }
+        // Consumer breakdown is only drawn in the popover/dashboard, so skip the extra reads while they're closed.
+        if isActive, let soc = SMC.shared?.number("PHPC"), soc > 0, soc < s.flow.systemLoad {
+            let split = PowerSources.splitSoC(soc, gpuUtilization: PowerSources.gpuUtilization() ?? 0)
+            s.flow.soc = split.cpu
+            s.flow.gpu = split.gpu
+        }
+        if isActive, let brightness = PowerSources.brightness() {
+            let load = s.flow.systemLoad - (s.flow.soc ?? 0) - (s.flow.gpu ?? 0)
+            // Never claim more than what's left after the chip; keeps the pieces summing to the system load.
+            s.flow.display = min(PowerSources.displayWatts(brightness: brightness), max(load - 0.2, 0.05))
+        }
         s.lowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
         if s.isPluggedIn && !snapshot.isPluggedIn && !history.isEmpty { plugEvents += 1 }
         // Ease the flow toward the new reading so the diagram glides; jump straight there when power state changes.

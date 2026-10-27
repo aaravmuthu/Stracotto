@@ -53,14 +53,29 @@ final class EnergyMonitor {
 
     private var smoothed: [String: (name: String, watts: Double)] = [:]
     private var task: Task<Void, Never>?
+    private var isActive = false
+
+    /// Every 3 s while the popover or dashboard is open. Closed, it only runs (every 10 s) to drive the menu bar flame
+    /// alert, and stops entirely when that's switched off.
+    func setActive(_ active: Bool) { isActive = active }
+
+    private var alertEnabled: Bool { UserDefaults.standard.object(forKey: Prefs.menuBarEnergyAlert) as? Bool ?? true }
+
+    private var interval: Duration { isActive ? .seconds(3) : alertEnabled ? .seconds(10) : .seconds(30) }
 
     init() {
         task = Task { [weak self] in
             var previous = await Self.sample()
             var previousTime = ContinuousClock.now
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(3))
+                try? await Task.sleep(for: self?.interval ?? .seconds(10))
+                if let self, !self.isActive, !self.alertEnabled {
+                    // Nothing on screen needs readings; wait. The baseline restarts when they're needed again.
+                    previous = [:]
+                    continue
+                }
                 let current = await Self.sample()
+                if previous.isEmpty { (previous, previousTime) = (current, ContinuousClock.now); continue }
                 let now = ContinuousClock.now
                 let seconds = Double((now - previousTime).components.seconds) + Double((now - previousTime).components.attoseconds) / 1e18
                 self?.ingest(previous: previous, current: current, seconds: seconds)
@@ -112,6 +127,10 @@ final class EnergyMonitor {
 
     struct Reading: Sendable { let energy: UInt64; let app: (id: String, name: String) }
 
+    /// pid → owning app, keyed by process start time so a recycled pid is re-resolved. Saves a proc_pidpath and a
+    /// display-name lookup per process per sample.
+    nonisolated(unsafe) private static var owners: [pid_t: (start: UInt64, app: (id: String, name: String))] = [:]
+
     nonisolated private static func sample() async -> [pid_t: Reading] {
         await Task.detached(priority: .utility) {
             let count = proc_listallpids(nil, 0)
@@ -125,9 +144,18 @@ final class EnergyMonitor {
                 let r = withUnsafeMutablePointer(to: &info) {
                     $0.withMemoryRebound(to: rusage_info_t?.self, capacity: 1) { proc_pid_rusage(pid, RUSAGE_INFO_V6, $0) }
                 }
-                guard r == 0, proc_pidpath(pid, &path, UInt32(path.count)) > 0 else { continue }
-                readings[pid] = Reading(energy: info.ri_energy_nj, app: owningApp(String(decoding: path.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)))
+                guard r == 0 else { continue }
+                let app: (id: String, name: String)
+                if let known = owners[pid], known.start == info.ri_proc_start_abstime {
+                    app = known.app
+                } else {
+                    guard proc_pidpath(pid, &path, UInt32(path.count)) > 0 else { continue }
+                    app = owningApp(String(decoding: path.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self))
+                    owners[pid] = (info.ri_proc_start_abstime, app)
+                }
+                readings[pid] = Reading(energy: info.ri_energy_nj, app: app)
             }
+            owners = owners.filter { readings[$0.key] != nil }
             return readings
         }.value
     }

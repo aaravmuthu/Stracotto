@@ -17,6 +17,7 @@ enum Theme {
     static let displayAmber = Color(.sRGB, red: 0.86, green: 0.72, blue: 0.55)
     static let otherMint = Color(.sRGB, red: 0.56, green: 0.82, blue: 0.68)
     static let soc = Color(.sRGB, red: 0.80, green: 0.70, blue: 1.0)   // light lavender
+    static let gpu = Color(.sRGB, red: 1.0, green: 0.62, blue: 0.74)   // rose
     static let display = Color(red: 0.35, green: 0.78, blue: 0.98)
     /// Current AlDente fills a discharging battery in neutral glass-gray, not orange.
     static let discharging = Color(white: 0.62)
@@ -126,34 +127,44 @@ private struct LiquidGlass<S: Shape>: ViewModifier {
             // bottom edges (~150) fading in over ~2 px, no bright sides; a dark halo (~42) separating it from the
             // 49-grey background.
             content.background {
-                shape.fill(Theme.slab.mix(with: tint ?? .clear, by: tint == nil ? 0 : 0.55))
-                    // Glass body: a soft sheen that fades from the top, darkening slightly toward the bottom.
+                // Translucent body (lifted so it lands on AlDente's grey over the backdrop) so the popover's own
+                // colour and any wash behind it shows through, like glass rather than a painted slab.
+                shape.fill(Theme.slab.mix(with: .white, by: 0.07).opacity(0.72).mix(with: tint ?? .clear, by: tint == nil ? 0 : 0.55))
+                    .overlay { shape.fill(.ultraThinMaterial).opacity(0.5) }
+                    // Soft sheen falling from the top edge.
                     .overlay {
                         shape.fill(LinearGradient(stops: [
-                            .init(color: .white.opacity(0.07), location: 0),
-                            .init(color: .white.opacity(0.015), location: 0.45),
-                            .init(color: .black.opacity(0.04), location: 1),
+                            .init(color: .white.opacity(0.14), location: 0),
+                            .init(color: .white.opacity(0.03), location: 0.4),
+                            .init(color: .black.opacity(0.06), location: 1),
                         ], startPoint: .top, endPoint: .bottom))
                     }
-                    // Inner glow just inside the top and bottom rims (88 → 67 over a few px in AlDente).
+                    // A diagonal specular glint across the upper-left, the way curved glass catches light.
+                    .overlay {
+                        shape.fill(LinearGradient(stops: [
+                            .init(color: .white.opacity(0.12), location: 0),
+                            .init(color: .white.opacity(0.0), location: 0.38),
+                        ], startPoint: .topLeading, endPoint: .bottomTrailing))
+                    }
+                    // Inner glow just inside the top and bottom rims.
                     .overlay {
                         GeometryReader { g in
-                            let fade = min(8 / max(g.size.height, 1), 0.3)
+                            let fade = min(10 / max(g.size.height, 1), 0.3)
                             shape.fill(LinearGradient(stops: [
-                                .init(color: .white.opacity(0.13), location: 0),
+                                .init(color: .white.opacity(0.18), location: 0),
                                 .init(color: .clear, location: fade),
                                 .init(color: .clear, location: 1 - fade),
-                                .init(color: .white.opacity(0.12), location: 1),
+                                .init(color: .white.opacity(0.14), location: 1),
                             ], startPoint: .top, endPoint: .bottom))
                         }
                     }
-                    // Specular rim: bright along the top, lit along the bottom, barely there on the sides.
+                    // Specular rim: bright along the top, lit along the bottom, a faint edge all round.
                     .overlay {
                         shape.stroke(LinearGradient(stops: [
-                            .init(color: .white.opacity(0.48), location: 0),
-                            .init(color: .white.opacity(0.06), location: 0.12),
-                            .init(color: .white.opacity(0.06), location: 0.88),
-                            .init(color: .white.opacity(0.38), location: 1),
+                            .init(color: .white.opacity(0.62), location: 0),
+                            .init(color: .white.opacity(0.10), location: 0.14),
+                            .init(color: .white.opacity(0.10), location: 0.86),
+                            .init(color: .white.opacity(0.45), location: 1),
                         ], startPoint: .top, endPoint: .bottom), lineWidth: 1.2)
                     }
                     .shadow(color: .black.opacity(0.42), radius: 1.6)

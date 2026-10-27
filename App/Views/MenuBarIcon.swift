@@ -11,8 +11,8 @@ struct MenuBarIcon: View {
 
     /// Width is a pure function of the configuration, never of animated content, so the status item never
     /// re-lays out mid-animation.
-    static func width(style: MenuBarStyle, stats: Int, hot: Bool) -> CGFloat {
-        style.width + 4 + CGFloat(stats) * (MenuBarStat.width + 4) + (hot ? 20 : 0)
+    static func width(style: MenuBarStyle, stats: [MenuBarStat], hot: Bool) -> CGFloat {
+        style.width + 4 + stats.reduce(0) { $0 + $1.slotWidth + 4 } + (hot ? 20 : 0)
     }
 
     var body: some View {
@@ -31,15 +31,19 @@ struct MenuBarIcon: View {
                     .help("\(energy.heavyApps.first?.name ?? "An app") is using a lot of energy")
             }
             ForEach(stats) { stat in
-                Text(stat.value(s))
-                    .font(.system(size: 11, weight: .medium))
-                    .monospacedDigit()
-                    .contentTransition(.numericText())
-                    .frame(width: MenuBarStat.width)
+                HStack(spacing: 3) {
+                    if stat == .timeRemaining { TimeStateIcon(state: s.state, size: 11) }
+                    Text(stat.value(s))
+                        .font(.system(size: 11, weight: .medium))
+                        .monospacedDigit()
+                        .contentTransition(.numericText())
+                        .frame(width: MenuBarStat.width)
+                }
+                .frame(width: stat.slotWidth)
             }
             MenuBarGlyph(style: style, percent: s.percent, state: s.state, plugEvents: battery.plugEvents)
         }
-        .frame(width: Self.width(style: style, stats: stats.count, hot: hot), height: 22)
+        .frame(width: Self.width(style: style, stats: stats, hot: hot), height: 22)
         .animation(.spring(response: 0.42, dampingFraction: 0.78), value: hot)
         .animation(.smooth(duration: 0.4), value: s.percent)
     }

@@ -14,12 +14,12 @@ struct PowerFlowView: View {
     @State private var selectedRect: CGRect = .zero
 
     enum Node: CaseIterable {
-        case adapter, batteryOut, batteryIn, mac, soc, display, other
+        case adapter, batteryOut, batteryIn, mac, soc, gpu, display, other
         var column: Int {
             switch self {
             case .adapter, .batteryOut: 0
             case .batteryIn, .mac: 1
-            case .soc, .display, .other: 2
+            case .soc, .gpu, .display, .other: 2
             }
         }
     }
@@ -29,21 +29,22 @@ struct PowerFlowView: View {
     private let gap: CGFloat = 6
 
     private var links: [Link] {
-        let consumers = (flow.soc ?? 0) + (flow.display ?? 0)
+        let consumers = (flow.soc ?? 0) + (flow.gpu ?? 0) + (flow.display ?? 0)
         var l = [
             Link(id: 0, from: .adapter, to: .batteryIn, watts: flow.adapterToBattery),
             Link(id: 1, from: .adapter, to: .mac, watts: flow.adapterToSystem),
             Link(id: 2, from: .batteryOut, to: .mac, watts: flow.batteryToSystem),
             Link(id: 3, from: .mac, to: .soc, watts: flow.soc ?? 0),
-            Link(id: 4, from: .mac, to: .display, watts: flow.display ?? 0),
-            Link(id: 5, from: .mac, to: .other, watts: max(flow.systemLoad - consumers, 0)),
+            Link(id: 4, from: .mac, to: .gpu, watts: flow.gpu ?? 0),
+            Link(id: 5, from: .mac, to: .display, watts: flow.display ?? 0),
+            Link(id: 6, from: .mac, to: .other, watts: max(flow.systemLoad - consumers, 0)),
         ]
         // Nothing measured yet: still show which way power is meant to go.
         if l[0...2].allSatisfy({ $0.watts < 0.01 }) {
             let i = state == .onBattery ? 2 : 1
             l[i] = Link(id: i, from: l[i].from, to: l[i].to, watts: 0.001)
         }
-        if l[3...5].allSatisfy({ $0.watts < 0.01 }) { l[5] = Link(id: 5, from: .mac, to: .other, watts: 0.001) }
+        if l[3...6].allSatisfy({ $0.watts < 0.01 }) { l[6] = Link(id: 6, from: .mac, to: .other, watts: 0.001) }
         return l
     }
 
@@ -86,17 +87,21 @@ struct PowerFlowView: View {
                         .frame(width: ribbonWidth, height: size.height)
                         .offset(x: ribbonX[stage])
                         .allowsHitTesting(false)
-                    // The branch into the CPU turns purple as it arrives.
-                    if stage == 1, let soc = stageLinks.first(where: { $0.to == .soc && $0.watts >= 0.01 }) {
-                        let a = layout.end(soc.id, source: true), b = layout.end(soc.id, source: false)
-                        LinearGradient(stops: [.init(color: .clear, location: 0.2), .init(color: Theme.soc.opacity(0.35), location: 0.7),
-                                               .init(color: Theme.soc.opacity(0.6), location: 1)],
-                                       startPoint: .leading, endPoint: .trailing)
-                            .clipShape(RibbonShape(top0: a.lowerBound, bottom0: a.upperBound, top1: b.lowerBound, bottom1: b.upperBound))
-                            .clipShape(shape)
-                            .frame(width: ribbonWidth, height: size.height)
-                            .offset(x: ribbonX[stage])
-                            .allowsHitTesting(false)
+                    // Each branch into a chip-side consumer takes on its own colour as it arrives.
+                    if stage == 1 {
+                        ForEach([(Node.soc, Theme.soc), (.gpu, Theme.gpu), (.display, Theme.displayAmber)], id: \.0) { node, color in
+                            if let branch = stageLinks.first(where: { $0.to == node && $0.watts >= 0.01 }) {
+                                let a = layout.end(branch.id, source: true), b = layout.end(branch.id, source: false)
+                                LinearGradient(stops: [.init(color: .clear, location: 0.2), .init(color: color.opacity(0.35), location: 0.7),
+                                                       .init(color: color.opacity(0.6), location: 1)],
+                                               startPoint: .leading, endPoint: .trailing)
+                                    .clipShape(RibbonShape(top0: a.lowerBound, bottom0: a.upperBound, top1: b.lowerBound, bottom1: b.upperBound))
+                                    .clipShape(shape)
+                                    .frame(width: ribbonWidth, height: size.height)
+                                    .offset(x: ribbonX[stage])
+                                    .allowsHitTesting(false)
+                            }
+                        }
                     }
                 }
 
@@ -149,7 +154,7 @@ struct PowerFlowView: View {
         }
         .frame(height: height)
         // Readings land every 2 s; a slightly shorter glide keeps shapes in continuous motion instead of stop-start.
-        .animation(.spring(response: 1.5, dampingFraction: 1), value: flow)
+        .animation(.smooth(duration: 1.0), value: flow)
         .animation(.smooth(duration: 0.6), value: state)
     }
 
@@ -191,7 +196,7 @@ struct PowerFlowView: View {
 
     private var palette: Palette {
         switch state {
-        case .charging: Palette(source: Theme.bolt, accent: Theme.charging)
+        case .charging: Palette(source: Theme.bolt.mix(with: Theme.charging, by: 0.3), accent: Theme.charging)
         case .pluggedDraining: Palette(source: Theme.bolt, accent: Theme.flowBlue)
         case .paused: Palette(source: Theme.bolt, accent: Theme.flowBlue)
         case .onBattery: Palette(source: Theme.batteryWarm, accent: Theme.flowBlue)
@@ -230,6 +235,7 @@ struct PowerFlowView: View {
             case .batteryIn: Image(systemName: "battery.100percent.bolt").font(.system(size: iconSize))
             case .mac: Image(systemName: "laptopcomputer").font(.system(size: iconSize, weight: .light)).foregroundStyle(palette.accent.mix(with: .white, by: 0.35))
             case .soc: Image(systemName: "cpu").font(.system(size: iconSize)).foregroundStyle(Theme.soc)
+            case .gpu: Image(systemName: "cube.transparent.fill").font(.system(size: iconSize)).foregroundStyle(Theme.gpu)
             case .display: FilledDisplayIcon(size: min(iconSize + 1, max((height - 5) / 0.8, 9)))
             case .other: Image(systemName: "ellipsis").font(.system(size: iconSize + 1, weight: .medium)).foregroundStyle(Theme.otherMint)
             }
@@ -251,7 +257,9 @@ private struct LabelLayout {
             let a = layout.end(link.id, source: true), b = layout.end(link.id, source: false)
             let thickness = min(a.upperBound - a.lowerBound, b.upperBound - b.lowerBound)
             let thin = thickness < 30
-            let u: CGFloat = thin ? 0.72 : 0.5
+            // Out of the Mac the branches only part company near the consumers, so their labels sit out there (the long
+            // bottom branch is straight enough to keep its centred label); into the Mac they stay mid-curve.
+            let u: CGFloat = link.from == .mac ? (link.to == .other ? 0.5 : 0.8) : (thin ? 0.72 : 0.5)
             func bez(_ p0: CGFloat, _ p1: CGFloat, _ p2: CGFloat, _ p3: CGFloat) -> CGFloat {
                 let m = 1 - u
                 return m * m * m * p0 + 3 * m * m * u * p1 + 3 * m * u * u * p2 + u * u * u * p3
@@ -260,6 +268,14 @@ private struct LabelLayout {
             let top = bez(a.lowerBound, a.lowerBound, b.lowerBound, b.lowerBound)
             let bottom = bez(a.upperBound, a.upperBound, b.upperBound, b.upperBound)
             labels[link.id] = Label(x: x, y: (top + bottom) / 2, thin: thin)
+        }
+        // Branches leaving the Mac can still end up closer than a line of text; nudge them apart, top to bottom.
+        var previous: CGFloat?
+        for link in links where link.from == .mac && link.to != .other {
+            guard var label = labels[link.id] else { continue }
+            if let previous, label.y - previous < 14 { label.y = previous + 14 }
+            labels[link.id] = label
+            previous = label.y
         }
     }
 
@@ -305,10 +321,12 @@ private struct SankeyLayout {
                 // AlDente's consumer column: the small consumers (CPU, display) stack from the top as slim bars, never
                 // thinner than an icon; "everything else" takes the rest and sits on the bottom edge. This keeps the
                 // branches in the same shape whatever the numbers are.
-                let slim = [PowerFlowView.Node.soc, .display].filter { weight($0) > 0 }
+                let slim = [PowerFlowView.Node.soc, .gpu, .display].filter { weight($0) > 0 }
+                // However many slim bars there are, leave "everything else" room at the bottom.
+                let cap = slim.isEmpty ? 0 : (height - 34 - nodeGap * CGFloat(slim.count)) / CGFloat(slim.count)
                 var y: CGFloat = 0
                 for n in slim {
-                    let h = min(max(20, mainHeight * CGFloat(weight(n) / total)), height * 0.3)
+                    let h = min(max(20, mainHeight * CGFloat(weight(n) / total)), cap)
                     nodes[n] = y...(y + h)
                     y += h + nodeGap
                 }
@@ -357,7 +375,7 @@ private struct FlowStreaks: View {
     var color: Color = .white
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 60)) { context in
+        TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
             let t = context.date.timeIntervalSinceReferenceDate
             let period = 3.2 / min(max(watts / 12, 0.6), 2.2)
             let phase = CGFloat((t / period).truncatingRemainder(dividingBy: 1))
@@ -479,23 +497,26 @@ private struct StageGradient: View {
             : [(a, 0.62, 0), (a, 0.55, 0.3), (a.mix(with: Theme.otherMint, by: 0.45), 0.40, 0.55), (a, 0.10, 0.72), (a, 0.0, 0.82)]
     }
 
-    var body: some View {
-        TimelineView(.animation) { context in
-            let phase = (context.date.timeIntervalSinceReferenceDate / period).truncatingRemainder(dividingBy: 1)
-            LinearGradient(stops: stops(phase: phase), startPoint: .leading, endPoint: .trailing)
-        }
-    }
+    @State private var sweep = false
 
-    /// The same gradient, sampled finely, with pulses of its own colour sliding along it toward the Mac (left to
-    /// right). Pulses add absolute brightness, so they stay visible even where the wash is faint.
-    private func stops(phase: Double) -> [Gradient.Stop] {
-        (0...64).map { i in
-            let x = Double(i) / 64
-            let (color, opacity) = sample(x)
-            // One long, gentle sine swell per stage width: no sharp peaks, so it glides instead of pulsing.
-            let w = 0.5 + 0.5 * cos(2 * .pi * (x - phase))
-            let pulse = w * w * (3 - 2 * w)   // smoothstep: soft shoulders
-            return .init(color: color.mix(with: palette.accent, by: pulse * 0.45).opacity(min(opacity + 0.22 * pulse, 1)), location: x)
+    /// The static wash, plus one soft band of the accent colour riding along it. The band is a single offset
+    /// animation, so SwiftUI doesn't re-evaluate or re-rasterise the gradient every frame.
+    var body: some View {
+        ZStack {
+            LinearGradient(stops: (0...24).map { i in
+                let x = Double(i) / 24
+                let (color, opacity) = sample(x)
+                return .init(color: color.opacity(opacity), location: x)
+            }, startPoint: .leading, endPoint: .trailing)
+            GeometryReader { p in
+                LinearGradient(colors: [.clear, palette.accent.opacity(0.30), .clear], startPoint: .leading, endPoint: .trailing)
+                    .frame(width: p.size.width * 0.7)
+                    .offset(x: sweep ? p.size.width : -p.size.width * 0.7)
+            }
+            .blendMode(.plusLighter)
+        }
+        .onAppear {
+            withAnimation(.linear(duration: period * 1.4).repeatForever(autoreverses: false)) { sweep = true }
         }
     }
 

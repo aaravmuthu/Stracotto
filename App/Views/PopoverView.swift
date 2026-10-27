@@ -242,7 +242,7 @@ struct SpecsList: View {
                 Measurement(value: $0, unit: UnitTemperature.celsius)
                     .formatted(.measurement(width: .abbreviated, usage: .weather, numberFormatStyle: .number.precision(.fractionLength(1))))
             } ?? "--")
-            row(Image(systemName: "clock"), "Time Remaining:", s.minutesRemaining.map(Self.shortDuration) ?? "--")
+            row(TimeStateIcon(state: s.state, size: 15), "Time Remaining:", s.minutesRemaining.map(Self.shortDuration) ?? "--")
             divider
             row(batteryLetter("i"), "Current:", s.amperage.formatted(.number.precision(.fractionLength(2))) + " A")
             row(batteryLetter("u"), "Voltage:", s.voltage.formatted(.number.precision(.fractionLength(0))) + " V")
