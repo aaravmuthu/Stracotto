@@ -59,23 +59,33 @@ serious power. Add temperature, watts or time remaining beside it, or switch to 
 icon: a clock on battery, a softly glowing green bolt while charging, a yellow plug when you're plugged in but not
 filling.
 
+## A welcome worth opening
+
+<p align="center"><img src="docs/images/welcome.png" alt="The first-launch welcome" width="100%"></p>
+
+The first time you open Stracotto it walks you through the setup in five short pages: pick where charging stops
+(drag the bar or tap a chip), see Power Flow, find Stracotto in the menu bar, and choose whether it opens at login.
+Nothing changes until you tap. Replay it any time from Settings → General.
+
 ## Everything else
 
 - **Apps Using Significant Energy:** per-app watts from the kernel's energy counters, with one-click Quit
 - **Specifications:** maximum capacity (matching System Settings), cycles, temperature, current, voltage, power and
   system load
 - **Schedule:** set limits, Top Up or Low Power Mode on a timetable, with templates, catch-up after sleep and history
-- **Make it yours:** System, Light or Dark; solid or Liquid Glass surfaces; choose which widgets the popover shows
-- **Light on your Mac:** the popover's animations only run while it's open; idle, Stracotto sits near 0 % CPU
+- **Make it yours:** System, Light or Dark; Liquid Glass (the default) or solid surfaces; choose which widgets the popover shows
+- **Light on your Mac:** the popover's animations only run while it's open, and they run on Core Animation's
+  compositor rather than in the app, so Stracotto sits at about 0 % CPU whether it's closed, open or showing the
+  menu bar flame
 
 ## Install
 
-1. [Download **Stracotto.dmg**](https://github.com/mks909/Stracotto/releases/latest/download/Stracotto.dmg) and drag
-   Stracotto into Applications.
+1. [Download **Stracotto.dmg**](https://github.com/mks909/Stracotto/releases/latest/download/Stracotto.dmg), open it
+   and drag Stracotto onto Applications.
 2. Open it. The first launch may ask you to confirm: right-click → **Open**, or allow it in
    System Settings → Privacy & Security.
-3. Optional: hide the system battery icon (System Settings → Control Center → Battery) so Stracotto's takes its place.
-   The popover offers a shortcut.
+3. Follow the welcome. It also offers a shortcut to hide the system battery icon (System Settings → Control Center →
+   Battery) so Stracotto's takes its place.
 
 <details>
 <summary><b>Build from source</b></summary>
@@ -88,7 +98,12 @@ open build/Build/Products/Release/Stracotto.app
 ```
 
 Developer flags: `--dump` prints the live battery reading, `--snapshot <dir>` renders the popover in every state,
-`--flow-frames <dir>` renders Power Flow over time, `--export-icon <file.png>` renders the app icon.
+`--flow-frames <dir>` renders Power Flow over time, `--export-icon <file.png>` renders the app icon,
+`--preview <state|flame>` opens the popover (or the menu bar flame) in a live window, and `--onboarding` replays the
+welcome.
+
+`tools/make-dmg.sh` builds the drag-to-Applications disk image (`--notarized` drops the right-click hint from its
+background).
 </details>
 
 <details>
