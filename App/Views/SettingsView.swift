@@ -356,7 +356,7 @@ private struct AutomationsPage: View {
 private struct AppearancePage: View {
     @AppStorage(AppearancePrefs.mode) private var mode = "system"
     @AppStorage(AppearancePrefs.reduceTransparency) private var reduceTransparency = false
-    @AppStorage(AppearancePrefs.liquidGlass) private var liquidGlass = false
+    @AppStorage(AppearancePrefs.liquidGlass) private var liquidGlass = true
     @AppStorage(AppearancePrefs.iconStyle) private var iconStyle = MenuBarStyle.native.rawValue
     @AppStorage(AppearancePrefs.stats) private var stats = ""
     @AppStorage(AppearancePrefs.rightClick) private var rightClick = RightClickAction.dashboard.rawValue

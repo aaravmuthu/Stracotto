@@ -375,21 +375,13 @@ private struct FlowStreaks: View {
     var color: Color = .white
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
-            let t = context.date.timeIntervalSinceReferenceDate
-            let period = 3.2 / min(max(watts / 12, 0.6), 2.2)
-            let phase = CGFloat((t / period).truncatingRemainder(dividingBy: 1))
-            GeometryReader { p in
-                ForEach(0..<2, id: \.self) { i in
-                    let x = ((phase + CGFloat(i) * 0.5).truncatingRemainder(dividingBy: 1)) * 1.4 - 0.3
-                    LinearGradient(colors: [.clear, color.opacity(0.16), color.opacity(0.22), color.opacity(0.16), .clear],
-                                   startPoint: .leading, endPoint: .trailing)
-                        .frame(width: p.size.width * 0.55)
-                        .offset(x: x * p.size.width)
-                }
-            }
+        // Two bands half a loop apart, sliding on the compositor; the speed still follows the watts.
+        let period = 3.2 / min(max(watts / 12, 0.6), 2.2)
+        let colors = [Color.clear, color.opacity(0.16), color.opacity(0.22), color.opacity(0.16), .clear]
+        ZStack {
+            SlidingBand(colors: colors, width: 0.55, from: -0.3, to: 1.1, duration: period, phase: 0, additive: true)
+            SlidingBand(colors: colors, width: 0.55, from: -0.3, to: 1.1, duration: period, phase: 0.5, additive: true)
         }
-        .blendMode(.plusLighter)
         .allowsHitTesting(false)
     }
 }
@@ -497,8 +489,6 @@ private struct StageGradient: View {
             : [(a, 0.62, 0), (a, 0.55, 0.3), (a.mix(with: Theme.otherMint, by: 0.45), 0.40, 0.55), (a, 0.10, 0.72), (a, 0.0, 0.82)]
     }
 
-    @State private var sweep = false
-
     /// The static wash, plus one soft band of the accent colour riding along it. The band is a single offset
     /// animation, so SwiftUI doesn't re-evaluate or re-rasterise the gradient every frame.
     var body: some View {
@@ -508,15 +498,8 @@ private struct StageGradient: View {
                 let (color, opacity) = sample(x)
                 return .init(color: color.opacity(opacity), location: x)
             }, startPoint: .leading, endPoint: .trailing)
-            GeometryReader { p in
-                LinearGradient(colors: [.clear, palette.accent.opacity(0.30), .clear], startPoint: .leading, endPoint: .trailing)
-                    .frame(width: p.size.width * 0.7)
-                    .offset(x: sweep ? p.size.width : -p.size.width * 0.7)
-            }
-            .blendMode(.plusLighter)
-        }
-        .onAppear {
-            withAnimation(.linear(duration: period * 1.4).repeatForever(autoreverses: false)) { sweep = true }
+            SlidingBand(colors: [.clear, palette.accent.opacity(0.30), .clear], width: 0.7, from: -0.7, to: 1.0,
+                        duration: period * 1.4, additive: true)
         }
     }
 

@@ -15,6 +15,17 @@ struct MenuBarIcon: View {
         style.width + 4 + stats.reduce(0) { $0 + $1.slotWidth + 4 } + (hot ? 20 : 0)
     }
 
+    /// Drawn once; the pulse is a compositor animation on this bitmap (see `PulsingImage`).
+    @MainActor private static let flame: NSImage = {
+        let glyph = Image(systemName: "flame.fill")
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(LinearGradient(colors: [Theme.bolt, Theme.draining, .red], startPoint: .top, endPoint: .bottom))
+            .frame(width: 14, height: 16)
+        let renderer = ImageRenderer(content: glyph)
+        renderer.scale = 3
+        return renderer.nsImage ?? NSImage()
+    }()
+
     var body: some View {
         let s = battery.snapshot
         let hot = showEnergyAlert && energy.isHot
@@ -22,10 +33,8 @@ struct MenuBarIcon: View {
         let stats = MenuBarStat.parse(statsRaw)
         HStack(spacing: 4) {
             if hot {
-                Image(systemName: "flame.fill")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(LinearGradient(colors: [Theme.bolt, Theme.draining, .red], startPoint: .top, endPoint: .bottom))
-                    .symbolEffect(.breathe.pulse.byLayer, options: .repeat(.continuous))
+                PulsingImage(image: Self.flame)
+                    .frame(width: 14, height: 16)
                     .frame(width: 16)
                     .transition(.scale(scale: 0.3).combined(with: .opacity))
                     .help("\(energy.heavyApps.first?.name ?? "An app") is using a lot of energy")

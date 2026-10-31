@@ -157,53 +157,24 @@ struct BatteryBar: View {
 private struct ChargingGloss: View {
     var color: Color = .white
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
-            let t = context.date.timeIntervalSinceReferenceDate
-            let phase = CGFloat((t / 2.4).truncatingRemainder(dividingBy: 1))
-            GeometryReader { p in
-                LinearGradient(colors: [.clear, color.mix(with: .white, by: 0.6).opacity(0.45), .clear], startPoint: .leading, endPoint: .trailing)
-                    .frame(width: p.size.width * 0.35)
-                    .offset(x: (phase * 1.7 - 0.35) * p.size.width)
-            }
-            .blendMode(.plusLighter)
-        }
-        .allowsHitTesting(false)
+        SlidingBand(colors: [.clear, color.mix(with: .white, by: 0.6).opacity(0.45), .clear], width: 0.35, from: -0.35, to: 1.35,
+                    duration: 2.4, additive: true)
+            .allowsHitTesting(false)
     }
 }
 
 /// Diagonal stripes rolling right through the fill while topping up — "filling past the limit".
 private struct TopUpStripes: View {
-    var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
-            let t = context.date.timeIntervalSinceReferenceDate
-            Canvas { ctx, size in
-                let spacing: CGFloat = 14
-                let shift = CGFloat((t * 22).truncatingRemainder(dividingBy: Double(spacing)))
-                var x = -size.height - spacing + shift
-                while x < size.width + spacing {
-                    var stripe = Path()
-                    stripe.move(to: CGPoint(x: x, y: size.height))
-                    stripe.addLine(to: CGPoint(x: x + size.height, y: 0))
-                    stripe.addLine(to: CGPoint(x: x + size.height + 6, y: 0))
-                    stripe.addLine(to: CGPoint(x: x + 6, y: size.height))
-                    stripe.closeSubpath()
-                    ctx.fill(stripe, with: .color(.white.opacity(0.16)))
-                    x += spacing
-                }
-            }
-        }
-        .allowsHitTesting(false)
-    }
+    var body: some View { RollingStripes().allowsHitTesting(false) }
 }
 
 /// The unfilled part of the track gently breathing green, pointing at 100 %.
 private struct TopUpGhost: View {
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
-            let t = context.date.timeIntervalSinceReferenceDate
-            let pulse = 0.5 + 0.5 * sin(t * 2 * .pi / 1.8)
-            LinearGradient(colors: [Theme.charging.opacity(0.10 + 0.18 * pulse), Theme.charging.opacity(0.04)],
-                           startPoint: .leading, endPoint: .trailing)
+        // Base wash plus a second layer that breathes in and out over it: 0.10 → 0.28 at the left edge, like before.
+        ZStack {
+            LinearGradient(colors: [Theme.charging.opacity(0.10), Theme.charging.opacity(0.04)], startPoint: .leading, endPoint: .trailing)
+            BreathingGradient(colors: [Theme.charging.opacity(0.18), Theme.charging.opacity(0)], low: 0, high: 1, period: 1.8)
         }
         .allowsHitTesting(false)
     }
