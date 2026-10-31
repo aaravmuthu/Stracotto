@@ -459,12 +459,27 @@ private struct AppearancePage: View {
 private struct GeneralPage: View {
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
     @Environment(\.showWelcome) private var showWelcome
+    @Environment(\.updater) private var updater
     @State private var confirmReset = false
 
     var body: some View {
         SettingsSection(title: "General", icon: "gearshape") {
             ToggleRow(title: "Launch at Login", icon: "power", isOn: $launchAtLogin)
                 .onChange(of: launchAtLogin) { _, on in LaunchAtLogin.set(on) }
+            if let updater {
+                ToggleRow(title: "Check for Updates Automatically", icon: "arrow.triangle.2.circlepath",
+                          isOn: Binding(get: { updater.automaticChecks }, set: { updater.automaticChecks = $0 }))
+                HStack {
+                    Text("Version \(updater.versionText)").font(.system(size: 12.5)).foregroundStyle(.secondary)
+                    Spacer()
+                    Button { updater.checkForUpdates() } label: {
+                        Text("Check for Updates…").font(.system(size: 13, weight: .semibold)).padding(.horizontal, 16).frame(height: 34)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!updater.canCheck)
+                    .liquidGlass(interactive: true, in: .capsule)
+                }
+            }
             Button { showWelcome() } label: {
                 Label("Show Welcome Again", systemImage: "sparkles").font(.system(size: 13, weight: .semibold))
             }

@@ -39,10 +39,13 @@ struct StracottoApp: App {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var status: StatusController?
+    private var updater: Updater?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if CommandLine.arguments.contains("--preview") { return }
-        let status = StatusController(battery: BatteryMonitor(), energy: EnergyMonitor(), charge: ChargeController())
+        let updater = Updater()
+        self.updater = updater
+        let status = StatusController(battery: BatteryMonitor(), energy: EnergyMonitor(), charge: ChargeController(), updater: updater)
         self.status = status
         if CommandLine.arguments.contains("--onboarding") || !UserDefaults.standard.bool(forKey: Prefs.onboardingDone) {
             // Let the menu bar item settle first, so the last page can point at it.
@@ -62,8 +65,10 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
     private let energy: EnergyMonitor
     private let charge: ChargeController
     private let scheduler: Scheduler
+    private let updater: Updater
 
-    init(battery: BatteryMonitor, energy: EnergyMonitor, charge: ChargeController) {
+    init(battery: BatteryMonitor, energy: EnergyMonitor, charge: ChargeController, updater: Updater) {
+        self.updater = updater
         self.battery = battery
         self.energy = energy
         self.charge = charge
@@ -105,6 +110,7 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
             let menu = NSMenu()
             menu.addItem(withTitle: "Open Dashboard", action: #selector(openDashboardFromMenu), keyEquivalent: "").target = self
             menu.addItem(withTitle: charge.isToppingUp ? "Stop Top Up" : "Top Up", action: #selector(toggleTopUpFromMenu), keyEquivalent: "").target = self
+            menu.addItem(withTitle: "Check for Updates…", action: #selector(checkForUpdatesFromMenu), keyEquivalent: "").target = self
             menu.addItem(.separator())
             menu.addItem(withTitle: "Quit Stracotto", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
             statusItem.menu = menu
@@ -115,6 +121,7 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
 
     @objc private func openDashboardFromMenu() { showSettings() }
     @objc private func toggleTopUpFromMenu() { charge.toggleTopUp() }
+    @objc private func checkForUpdatesFromMenu() { updater.checkForUpdates() }
 
     private func togglePopover() {
         guard let button = statusItem.button else { return }
@@ -221,6 +228,7 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
                 .environment(energy)
                 .environment(charge)
                 .environment(scheduler)
+                .environment(\.updater, updater)
                 .environment(\.showWelcome, SettingsOpener { [weak self] in self?.showWelcome() })))
             window.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
             window.titlebarAppearsTransparent = true
