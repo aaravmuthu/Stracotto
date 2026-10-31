@@ -116,7 +116,7 @@ private struct LiquidGlass<S: Shape>: ViewModifier {
     let shape: S
     let tint: Color?
     let interactive: Bool
-    @AppStorage(AppearancePrefs.liquidGlass) private var useLiquidGlass = false
+    @AppStorage(AppearancePrefs.liquidGlass) private var useLiquidGlass = true
     @AppStorage(AppearancePrefs.reduceTransparency) private var reduceTransparency = false
 
     func body(content: Content) -> some View {

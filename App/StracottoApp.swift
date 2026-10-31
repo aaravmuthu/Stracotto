@@ -10,6 +10,7 @@ enum Prefs {
     static let menuBarPercent = "menuBarPercent"
     static let menuBarIcon = "menuBarIcon"
     static let menuBarEnergyAlert = "menuBarEnergyAlert"
+    static let onboardingDone = "onboarding.done"
 }
 
 /// A reference type so views compare it by identity instead of re-rendering on every environment pass.
@@ -22,6 +23,7 @@ final class SettingsOpener: Sendable {
 
 extension EnvironmentValues {
     @Entry var showSettings: SettingsOpener = .none
+    @Entry var showWelcome: SettingsOpener = .none
 }
 
 @main
@@ -40,7 +42,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if CommandLine.arguments.contains("--preview") { return }
-        status = StatusController(battery: BatteryMonitor(), energy: EnergyMonitor(), charge: ChargeController())
+        let status = StatusController(battery: BatteryMonitor(), energy: EnergyMonitor(), charge: ChargeController())
+        self.status = status
+        if CommandLine.arguments.contains("--onboarding") || !UserDefaults.standard.bool(forKey: Prefs.onboardingDone) {
+            // Let the menu bar item settle first, so the last page can point at it.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { status.showWelcome() }
+        }
     }
 }
 
@@ -50,6 +57,7 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
     private let statusItem: NSStatusItem
     private let popover = NSPopover()
     private var settingsWindow: NSWindow?
+    private var welcomeWindow: NSWindow?
     private let battery: BatteryMonitor
     private let energy: EnergyMonitor
     private let charge: ChargeController
@@ -130,6 +138,13 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
+        if (notification.object as? NSWindow) === welcomeWindow {
+            UserDefaults.standard.set(true, forKey: Prefs.onboardingDone)
+            // Drop the content so none of the welcome's views or animations outlive the window.
+            welcomeWindow?.contentViewController = nil
+            welcomeWindow = nil
+            return
+        }
         // isVisible is still true inside willClose; look again once the window is gone.
         DispatchQueue.main.async { [weak self] in self?.updateActivity() }
     }
@@ -170,6 +185,34 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
         }
     }
 
+    func showWelcome() {
+        popover.performClose(nil)
+        if welcomeWindow == nil {
+            let window = NSWindow(contentViewController: NSHostingController(rootView: OnboardingView(onFinish: { [weak self] in self?.finishWelcome() })
+                .environment(battery)
+                .environment(charge)))
+            window.styleMask = [.titled, .closable, .fullSizeContentView]
+            window.titleVisibility = .hidden
+            window.titlebarAppearsTransparent = true
+            window.isMovableByWindowBackground = true
+            window.isReleasedWhenClosed = false
+            window.appearance = NSAppearance(named: .darkAqua)
+            window.delegate = self
+            window.center()
+            welcomeWindow = window
+        }
+        NSApp.activate()
+        welcomeWindow?.makeKeyAndOrderFront(nil)
+    }
+
+    /// The last page's button: close, then open the popover so the person sees where Stracotto lives.
+    private func finishWelcome() {
+        welcomeWindow?.close()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
+            if self?.popover.isShown == false { self?.togglePopover() }
+        }
+    }
+
     private func showSettings() {
         popover.performClose(nil)
         if settingsWindow == nil {
@@ -177,7 +220,8 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
                 .environment(battery)
                 .environment(energy)
                 .environment(charge)
-                .environment(scheduler)))
+                .environment(scheduler)
+                .environment(\.showWelcome, SettingsOpener { [weak self] in self?.showWelcome() })))
             window.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
             window.titlebarAppearsTransparent = true
             window.title = "Stracotto"

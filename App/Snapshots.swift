@@ -44,6 +44,22 @@ enum Snapshots {
     /// data. Liquid Glass only renders in a live window, so this is how the glass gets checked.
     @MainActor static func preview(_ name: String) {
         DispatchQueue.main.async {
+            if name == "flame" {
+                // The menu bar item with the energy alert showing, for measuring its always-on animation.
+                let bar = MenuBarIcon()
+                    .environment(BatteryMonitor(fixed: sampleStates().first { $0.0 == "battery" }!.1))
+                    .environment(EnergyMonitor(fixed: [.init(id: "/Applications/Xcode.app", name: "Xcode", watts: 9)]))
+                    .padding(20).background(Color(white: 0.12))
+                let window = NSWindow(contentViewController: NSHostingController(rootView: bar))
+                window.title = "Stracotto Preview – flame"
+                window.isReleasedWhenClosed = false
+                window.center()
+                NSApp.setActivationPolicy(.regular)
+                window.makeKeyAndOrderFront(nil)
+                NSApp.activate()
+                previewWindow = window
+                return
+            }
             let samples = sampleStates()
             guard let snap = samples.first(where: { $0.0 == name })?.1 else { return }
             let view = PopoverView()
@@ -132,6 +148,17 @@ enum Snapshots {
             if let cg = renderer.cgImage {
                 let rep = NSBitmapImageRep(cgImage: cg)
                 try? rep.representation(using: .png, properties: [:])?.write(to: dir.appendingPathComponent("\(name).png"))
+            }
+        }
+        // The welcome, page by page, settled.
+        for page in 0..<OnboardingView.pageCount {
+            let view = OnboardingView(initialPage: page, settled: true)
+                .environment(BatteryMonitor(fixed: sampleStates().first { $0.0 == "paused" }!.1))
+                .environment(ChargeController(previewLimit: 80))
+            let renderer = ImageRenderer(content: view)
+            renderer.scale = 2
+            if let cg = renderer.cgImage {
+                try? NSBitmapImageRep(cgImage: cg).representation(using: .png, properties: [:])?.write(to: dir.appendingPathComponent("onboarding-\(page).png"))
             }
         }
         // Menu bar item on a dark and a light bar.

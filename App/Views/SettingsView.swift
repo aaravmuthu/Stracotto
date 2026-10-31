@@ -356,7 +356,7 @@ private struct AutomationsPage: View {
 private struct AppearancePage: View {
     @AppStorage(AppearancePrefs.mode) private var mode = "system"
     @AppStorage(AppearancePrefs.reduceTransparency) private var reduceTransparency = false
-    @AppStorage(AppearancePrefs.liquidGlass) private var liquidGlass = false
+    @AppStorage(AppearancePrefs.liquidGlass) private var liquidGlass = true
     @AppStorage(AppearancePrefs.iconStyle) private var iconStyle = MenuBarStyle.native.rawValue
     @AppStorage(AppearancePrefs.stats) private var stats = ""
     @AppStorage(AppearancePrefs.rightClick) private var rightClick = RightClickAction.dashboard.rawValue
@@ -458,12 +458,19 @@ private struct AppearancePage: View {
 
 private struct GeneralPage: View {
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
+    @Environment(\.showWelcome) private var showWelcome
     @State private var confirmReset = false
 
     var body: some View {
         SettingsSection(title: "General", icon: "gearshape") {
             ToggleRow(title: "Launch at Login", icon: "power", isOn: $launchAtLogin)
                 .onChange(of: launchAtLogin) { _, on in LaunchAtLogin.set(on) }
+            Button { showWelcome() } label: {
+                Label("Show Welcome Again", systemImage: "sparkles").font(.system(size: 13, weight: .semibold))
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 16).frame(height: 36)
+            .liquidGlass(interactive: true, in: .capsule)
         }
         SettingsSection(title: "Help & Support", icon: "questionmark.circle") {
             HStack {
