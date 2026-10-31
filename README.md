@@ -67,6 +67,12 @@ The first time you open Stracotto it walks you through the setup in five short p
 (drag the bar or tap a chip), see Power Flow, find Stracotto in the menu bar, and choose whether it opens at login.
 Nothing changes until you tap. Replay it any time from Settings → General.
 
+## Updates itself
+
+Stracotto checks for a new version once a day and offers it in a standard update window; Settings → General has
+**Check for Updates…** and a switch for the daily check. Every update is signed with a private key only the
+maintainer holds, and the app refuses anything that doesn't verify, so a tampered download is never installed.
+
 ## Everything else
 
 - **Apps Using Significant Energy:** per-app watts from the kernel's energy counters, with one-click Quit
@@ -101,6 +107,9 @@ Developer flags: `--dump` prints the live battery reading, `--snapshot <dir>` re
 `--flow-frames <dir>` renders Power Flow over time, `--export-icon <file.png>` renders the app icon,
 `--preview <state|flame>` opens the popover (or the menu bar flame) in a live window, and `--onboarding` replays the
 welcome.
+
+`tools/release.sh <version> <build>` bumps the version, builds, makes the DMG and signs the update feed, then prints
+the `gh release create` command to publish it (it never publishes by itself).
 
 `tools/make-dmg.sh` builds the drag-to-Applications disk image (`--notarized` drops the right-click hint from its
 background).

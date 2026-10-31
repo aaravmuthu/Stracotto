@@ -5,3 +5,4 @@ DerivedData/
 App/Info.plist
 
 *.dmg
+dist/
