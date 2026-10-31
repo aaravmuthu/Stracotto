@@ -3,3 +3,5 @@ DerivedData/
 *.xcodeproj/
 .DS_Store
 App/Info.plist
+
+*.dmg
