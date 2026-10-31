@@ -150,6 +150,17 @@ enum Snapshots {
                 try? rep.representation(using: .png, properties: [:])?.write(to: dir.appendingPathComponent("\(name).png"))
             }
         }
+        // The welcome, page by page, settled.
+        for page in 0..<OnboardingView.pageCount {
+            let view = OnboardingView(initialPage: page, settled: true)
+                .environment(BatteryMonitor(fixed: sampleStates().first { $0.0 == "paused" }!.1))
+                .environment(ChargeController(previewLimit: 80))
+            let renderer = ImageRenderer(content: view)
+            renderer.scale = 2
+            if let cg = renderer.cgImage {
+                try? NSBitmapImageRep(cgImage: cg).representation(using: .png, properties: [:])?.write(to: dir.appendingPathComponent("onboarding-\(page).png"))
+            }
+        }
         // Menu bar item on a dark and a light bar.
         let timerBattery = { var b = battery; b.percent = 42; b.minutesRemaining = 155; return b }()
         for (name, snap, scheme) in [("menubar-charging", charging, ColorScheme.dark), ("menubar-battery-low", { var b = battery; b.percent = 14; return b }(), .light), ("menubar-paused", paused, .dark),

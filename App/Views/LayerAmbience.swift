@@ -5,7 +5,7 @@ import SwiftUI
 /// these layers animate in the compositor and cost the app nothing once started. Same look, same timing.
 
 /// A soft gradient band sliding across its container, looping forever.
-struct SlidingBand: NSViewRepresentable {
+struct SlidingBand: View {
     var colors: [Color]
     /// Band width as a fraction of the container's.
     var width: CGFloat
@@ -17,8 +17,26 @@ struct SlidingBand: NSViewRepresentable {
     var phase: Double = 0
     var additive = false
 
-    func makeNSView(context: Context) -> BandView { BandView() }
-    func updateNSView(_ view: BandView, context: Context) { view.configure(self) }
+    var body: some View {
+        if Theme.flatGlass {
+            // Offscreen snapshots can't draw AppKit views; show the band frozen mid-pass.
+            GeometryReader { p in
+                let at = (0.35 + phase).truncatingRemainder(dividingBy: 1)
+                LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing)
+                    .frame(width: p.size.width * width)
+                    .offset(x: p.size.width * (from + (to - from) * at))
+            }
+            .blendMode(additive ? .plusLighter : .normal)
+        } else {
+            BandLayer(spec: self)
+        }
+    }
+
+    struct BandLayer: NSViewRepresentable {
+        let spec: SlidingBand
+        func makeNSView(context: Context) -> BandView { BandView() }
+        func updateNSView(_ view: BandView, context: Context) { view.configure(spec) }
+    }
 
     final class BandView: NSView {
         private let band = CAGradientLayer()
@@ -68,14 +86,25 @@ struct SlidingBand: NSViewRepresentable {
 }
 
 /// A layer whose opacity breathes between two values, looping forever.
-struct BreathingGradient: NSViewRepresentable {
+struct BreathingGradient: View {
     var colors: [Color]
     var low: Float
     var high: Float
     var period: Double
 
-    func makeNSView(context: Context) -> BreathView { BreathView() }
-    func updateNSView(_ view: BreathView, context: Context) { view.configure(self) }
+    var body: some View {
+        if Theme.flatGlass {
+            LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing).opacity(Double(low + high) / 2)
+        } else {
+            BreathLayer(spec: self)
+        }
+    }
+
+    struct BreathLayer: NSViewRepresentable {
+        let spec: BreathingGradient
+        func makeNSView(context: Context) -> BreathView { BreathView() }
+        func updateNSView(_ view: BreathView, context: Context) { view.configure(spec) }
+    }
 
     final class BreathView: NSView {
         private let glow = CAGradientLayer()
@@ -120,13 +149,36 @@ struct BreathingGradient: NSViewRepresentable {
 }
 
 /// Diagonal stripes rolling right, looping seamlessly after one stripe spacing.
-struct RollingStripes: NSViewRepresentable {
+struct RollingStripes: View {
     var spacing: CGFloat = 14
     var speed: CGFloat = 22   // pt per second
     var opacity: CGFloat = 0.16
 
-    func makeNSView(context: Context) -> StripeView { StripeView() }
-    func updateNSView(_ view: StripeView, context: Context) { view.spec = self; view.needsLayout = true }
+    var body: some View {
+        if Theme.flatGlass {
+            Canvas { ctx, size in
+                var x = -size.height - spacing
+                while x < size.width + spacing {
+                    var stripe = Path()
+                    stripe.move(to: CGPoint(x: x, y: size.height))
+                    stripe.addLine(to: CGPoint(x: x + size.height, y: 0))
+                    stripe.addLine(to: CGPoint(x: x + size.height + 6, y: 0))
+                    stripe.addLine(to: CGPoint(x: x + 6, y: size.height))
+                    stripe.closeSubpath()
+                    ctx.fill(stripe, with: .color(.white.opacity(opacity)))
+                    x += spacing
+                }
+            }
+        } else {
+            StripeLayer(spec: self)
+        }
+    }
+
+    struct StripeLayer: NSViewRepresentable {
+        let spec: RollingStripes
+        func makeNSView(context: Context) -> StripeView { StripeView() }
+        func updateNSView(_ view: StripeView, context: Context) { view.spec = spec; view.needsLayout = true }
+    }
 
     final class StripeView: NSView {
         var spec = RollingStripes()
@@ -181,14 +233,25 @@ struct RollingStripes: NSViewRepresentable {
 
 /// An image that swells and glows in a loop, run by the compositor. Stands in for an always-on SF Symbol effect, which
 /// re-renders its host every frame; in the menu bar that cost about 6 % of a core for as long as an app stayed hot.
-struct PulsingImage: NSViewRepresentable {
+struct PulsingImage: View {
     var image: NSImage
     var period: Double = 1.4
     var scale: CGFloat = 1.14
     var dim: Float = 0.62
 
-    func makeNSView(context: Context) -> PulseView { PulseView() }
-    func updateNSView(_ view: PulseView, context: Context) { view.configure(self) }
+    var body: some View {
+        if Theme.flatGlass {
+            Image(nsImage: image).resizable().scaledToFit()
+        } else {
+            PulseLayer(spec: self)
+        }
+    }
+
+    struct PulseLayer: NSViewRepresentable {
+        let spec: PulsingImage
+        func makeNSView(context: Context) -> PulseView { PulseView() }
+        func updateNSView(_ view: PulseView, context: Context) { view.configure(spec) }
+    }
 
     final class PulseView: NSView {
         private let content = CALayer()
