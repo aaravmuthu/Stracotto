@@ -43,6 +43,6 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.aaravmuthu.stracotto
         # Where the app looks for updates. The single place to change once the public host is decided.
-        STRACOTTO_FEED_URL: https://github.com/mks909/Stracotto-releases/releases/latest/download/appcast.xml
+        STRACOTTO_FEED_URL: https://github.com/aaravmuthu/Stracotto-releases/releases/latest/download/appcast.xml
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_APP_SANDBOX: NO

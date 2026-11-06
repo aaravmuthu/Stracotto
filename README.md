@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mks909/Stracotto/releases/latest/download/Stracotto.dmg"><b>⬇&nbsp; Download for Mac</b></a>
+  <a href="https://github.com/aaravmuthu/Stracotto/releases/latest/download/Stracotto.dmg"><b>⬇&nbsp; Download for Mac</b></a>
   &nbsp;·&nbsp; macOS 27 &nbsp;·&nbsp; Apple silicon MacBooks &nbsp;·&nbsp; Free
 </p>
 
@@ -86,7 +86,7 @@ maintainer holds, and the app refuses anything that doesn't verify, so a tampere
 
 ## Install
 
-1. [Download **Stracotto.dmg**](https://github.com/mks909/Stracotto/releases/latest/download/Stracotto.dmg), open it
+1. [Download **Stracotto.dmg**](https://github.com/aaravmuthu/Stracotto/releases/latest/download/Stracotto.dmg), open it
    and drag Stracotto onto Applications.
 2. Open it. The first launch may ask you to confirm: right-click → **Open**, or allow it in
    System Settings → Privacy & Security.

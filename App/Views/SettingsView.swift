@@ -88,7 +88,7 @@ private struct SidebarFooter: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Stracotto \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")")
                     .font(.system(size: 12, weight: .semibold))
-                Text("github.com/mks909/Stracotto").font(.system(size: 11)).foregroundStyle(Theme.paused)
+                Text("github.com/aaravmuthu/Stracotto").font(.system(size: 11)).foregroundStyle(Theme.paused)
             }
             }
             HStack {
@@ -491,7 +491,7 @@ private struct GeneralPage: View {
             HStack {
                 Text("Source code, issues and release notes").font(.system(size: 13))
                 Spacer()
-                Link("Open on GitHub", destination: URL(string: "https://github.com/mks909/Stracotto")!).buttonStyle(.glass)
+                Link("Open on GitHub", destination: URL(string: "https://github.com/aaravmuthu/Stracotto")!).buttonStyle(.glass)
             }
         }
         SettingsSection(title: "Reset", icon: "arrow.counterclockwise") {
